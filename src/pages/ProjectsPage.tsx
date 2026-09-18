@@ -26,7 +26,8 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { MOCK_MILESTONES, MOCK_DECISIONS } from "@/data/mock-data";
+import { useMilestones } from "@/hooks/useMilestones";
+import { useDecisions } from "@/hooks/useDecisions";
 
 export function ProjectsPage() {
   const { role, currentClient } = useAuth();
@@ -66,9 +67,9 @@ export function ProjectsPage() {
   const { files, uploadFile, canUpload } = useFiles(selectedProject?.client_id, selectedService?.id);
 
   // Filter items scoped to the active Service Workspace
-  const serviceMilestones = MOCK_MILESTONES.filter((m) => m.service_id === selectedService?.id);
+  const { milestones: serviceMilestones } = useMilestones(selectedService?.id, selectedProject?.id);
+  const { decisions: serviceDecisions } = useDecisions(selectedService?.id, selectedProject?.id);
   const serviceApprovals = approvals.filter((a) => a.service_id === selectedService?.id || a.project_id === selectedProject?.id);
-  const serviceDecisions = MOCK_DECISIONS.filter((d) => d.service_id === selectedService?.id);
 
   // New Work Record Form State
   const [showRecordModal, setShowRecordModal] = useState(false);

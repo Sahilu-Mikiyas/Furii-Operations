@@ -6,11 +6,11 @@ import { useApprovals } from "@/hooks/useApprovals";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useServices } from "@/hooks/useServices";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
+import { useActivityLogs } from "@/hooks/useActivityLogs";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { formatCurrency, formatDate, formatRelativeDate } from "@/lib/utils";
-import { MOCK_ACTIVITY } from "@/data/mock-data";
 import {
   Users,
   Briefcase,
@@ -46,6 +46,7 @@ function AdminDashboard({ currency, onSwitchToClient }: { currency: "ETB" | "USD
   const { approvals } = useApprovals();
   const { invoices } = useInvoices();
   const { events } = useCalendarEvents();
+  const { activities } = useActivityLogs();
 
   const activeClients = clients.filter((c) => c.status === "active");
   const activeProjects = projects.filter((p) => p.status === "active" || p.status === "waiting_for_client");
@@ -247,7 +248,7 @@ function AdminDashboard({ currency, onSwitchToClient }: { currency: "ETB" | "USD
             </div>
 
             <div className="relative pl-4 border-l-2 border-border/80 space-y-4">
-              {MOCK_ACTIVITY.slice(0, 4).map((act) => (
+              {activities.slice(0, 4).map((act) => (
                 <div key={act.id} className="relative group">
                   <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary border-2 border-background" />
                   <p className="text-xs font-medium text-foreground leading-snug">{act.entity_title}</p>

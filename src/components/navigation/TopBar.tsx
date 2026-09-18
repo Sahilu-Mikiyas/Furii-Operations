@@ -1,14 +1,13 @@
 import React, { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { useApprovals } from "@/hooks/useApprovals";
+import { useTasks } from "@/hooks/useTasks";
 import {
   Search,
   Bell,
   CheckCircle2,
-  DollarSign,
-  UserCheck,
   Building,
 } from "lucide-react";
-import { MOCK_NOTIFICATIONS, MOCK_CLIENTS } from "@/data/mock-data";
 import type { UserRole } from "@/types";
 
 interface TopBarProps {
@@ -26,15 +25,39 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
     setCurrentClient,
     currency,
     setCurrency,
+    availableClients,
   } = useAuth();
 
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const { approvals } = useApprovals();
+  const { tasks } = useTasks();
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [readIds, setReadIds] = useState<string[]>([]);
+
+  // Compute live notifications from real database records
+  const liveNotifications = [
+    ...approvals
+      .filter((a) => a.status === "awaiting_review" || a.status === "pending")
+      .map((a) => ({
+        id: `appr-${a.id}`,
+        title: "Review Required",
+        body: `Deliverable "${a.title}" is awaiting formal client review.`,
+        is_read: readIds.includes(`appr-${a.id}`),
+      })),
+    ...tasks
+      .filter((t) => t.priority === "urgent" && t.status !== "completed")
+      .map((t) => ({
+        id: `task-${t.id}`,
+        title: "Urgent Production Task",
+        body: `Task "${t.title}" is flagged high priority.`,
+        is_read: readIds.includes(`task-${t.id}`),
+      })),
+  ];
+
+  const unreadCount = liveNotifications.filter((n) => !n.is_read).length;
 
   const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setReadIds(liveNotifications.map((n) => n.id));
   };
 
   return (
@@ -43,11 +66,11 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
       <div className="flex items-center gap-3 flex-1 max-w-md">
         <button
           onClick={onOpenSearch}
-          className="w-full flex items-center justify-between px-3.5 py-1.5 text-xs text-muted-foreground bg-card hover:bg-secondary/70 border border-border rounded-lg shadow-2xs transition-colors"
+          className="w-full flex items-center justify-between px-3.5 py-1.5 text-xs text-muted-foreground bg-card hover:bg-secondary/70 border border-border rounded-lg shadow-2xs transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <Search className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>Search clients, projects, tasks, files...</span>
+            <span>Search live clients, projects, tasks, files...</span>
           </div>
           <kbd className="font-mono text-[10px] bg-secondary px-1.5 py-0.5 rounded border border-border text-muted-foreground">
             ⌘K
@@ -61,7 +84,7 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
         <div className="flex items-center bg-secondary/70 p-0.5 rounded-lg border border-border">
           <button
             onClick={() => setCurrency("ETB")}
-            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
               currency === "ETB"
                 ? "bg-primary text-primary-foreground shadow-2xs"
                 : "text-muted-foreground hover:text-foreground"
@@ -71,7 +94,7 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
           </button>
           <button
             onClick={() => setCurrency("USD")}
-            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
               currency === "USD"
                 ? "bg-primary text-primary-foreground shadow-2xs"
                 : "text-muted-foreground hover:text-foreground"
@@ -81,19 +104,19 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
           </button>
         </div>
 
-        {/* Client selector (when in admin mode) */}
-        {workspaceMode === "admin" && (
-          <div className="hidden lg:flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg text-xs">
-            <Building className="h-3.5 w-3.5 text-muted-foreground" />
+        {/* Client Account Selector (In Client Mode) */}
+        {workspaceMode === "client" && (
+          <div className="hidden sm:flex items-center gap-1.5 bg-card border border-border rounded-lg px-2.5 py-1 shadow-2xs">
+            <Building className="h-3.5 w-3.5 text-primary" />
             <select
               value={currentClient?.id || ""}
               onChange={(e) => {
-                const found = MOCK_CLIENTS.find((c) => c.id === e.target.value);
+                const found = availableClients.find((c) => c.id === e.target.value);
                 if (found) setCurrentClient(found);
               }}
-              className="bg-transparent border-none text-xs font-medium text-foreground focus:outline-hidden cursor-pointer"
+              className="text-xs font-semibold bg-transparent text-foreground focus:outline-hidden cursor-pointer"
             >
-              {MOCK_CLIENTS.map((c) => (
+              {availableClients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -102,20 +125,42 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
           </div>
         )}
 
-        {/* Role Simulator Switcher */}
-        <div className="hidden sm:flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg text-xs">
-          <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-muted-foreground text-[11px]">Role:</span>
+        {/* Workspace Mode Indicator / Quick Switcher */}
+        <div className="flex items-center bg-secondary/70 p-0.5 rounded-lg border border-border text-xs">
+          <button
+            onClick={() => setWorkspaceMode("admin")}
+            className={`px-2.5 py-1 font-semibold rounded-md transition-colors cursor-pointer ${
+              workspaceMode === "admin"
+                ? "bg-card text-foreground shadow-2xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Agency Ops
+          </button>
+          <button
+            onClick={() => setWorkspaceMode("client")}
+            className={`px-2.5 py-1 font-semibold rounded-md transition-colors cursor-pointer ${
+              workspaceMode === "client"
+                ? "bg-card text-foreground shadow-2xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Client View
+          </button>
+        </div>
+
+        {/* Perspective Role Switcher */}
+        <div className="relative">
           <select
             value={role}
             onChange={(e) => switchRole(e.target.value as UserRole)}
-            className="bg-transparent border-none text-xs font-semibold text-foreground focus:outline-hidden cursor-pointer"
+            className="text-xs font-mono font-semibold bg-secondary/70 border border-border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-hidden cursor-pointer"
           >
-            <option value="super_admin">Super Admin (Mikiyas)</option>
-            <option value="admin">Project Manager</option>
-            <option value="team_member">Team Member (Designer/Dev)</option>
-            <option value="client_owner">Client Owner (Ersas)</option>
-            <option value="client_member">Client Member (Restricted)</option>
+            <option value="super_admin">⚡ Super Admin</option>
+            <option value="admin">💼 Project Manager</option>
+            <option value="team_member">🛠️ Team Member</option>
+            <option value="client_owner">👑 Client Owner</option>
+            <option value="client_member">👥 Client Member</option>
           </select>
         </div>
 
@@ -123,7 +168,7 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
           >
             <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
@@ -134,28 +179,36 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
           {showNotifications && (
             <div className="absolute right-0 mt-2 w-80 rounded-xl bg-card border border-border shadow-lg p-3 z-50 animate-in fade-in zoom-in-95">
               <div className="flex items-center justify-between pb-2 border-b border-border/80">
-                <span className="text-xs font-bold text-foreground">Notifications</span>
+                <span className="text-xs font-bold text-foreground">
+                  Notifications {unreadCount > 0 && `(${unreadCount})`}
+                </span>
                 {unreadCount > 0 && (
                   <button
                     onClick={markAllAsRead}
-                    className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                    className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
                   >
-                    <CheckCircle2 className="h-3 w-3" /> Mark all read
+                    <CheckCircle2 className="h-3 w-3" /> Mark read
                   </button>
                 )}
               </div>
               <div className="divide-y divide-border/60 max-h-72 overflow-y-auto mt-2">
-                {notifications.map((n) => (
-                  <div key={n.id} className="py-2.5 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-foreground">{n.title}</span>
-                      {!n.is_read && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                      )}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">{n.body}</p>
+                {liveNotifications.length === 0 ? (
+                  <div className="py-4 text-center text-xs text-muted-foreground">
+                    All caught up! No active review notices.
                   </div>
-                ))}
+                ) : (
+                  liveNotifications.map((n) => (
+                    <div key={n.id} className="py-2.5 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground">{n.title}</span>
+                        {!n.is_read && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">{n.body}</p>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
