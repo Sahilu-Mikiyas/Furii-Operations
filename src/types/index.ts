@@ -81,6 +81,7 @@ export interface Organization extends BaseRecord {
 
 export interface Profile extends BaseRecord {
   organization_id: string;
+  client_id?: string | null;
   email: string;
   full_name: string;
   avatar_url?: string | null;
@@ -90,6 +91,7 @@ export interface Profile extends BaseRecord {
 
 export interface Membership extends BaseRecord {
   organization_id: string;
+  client_id?: string | null;
   user_id: string;
   role: UserRole;
   is_active: boolean;

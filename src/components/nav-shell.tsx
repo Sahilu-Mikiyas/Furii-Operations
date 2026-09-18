@@ -9,8 +9,8 @@ export function NavShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const pathname = location.pathname;
 
-  // Don't render sidebar shell on auth pages
-  if (pathname === "/auth" || pathname.startsWith("/auth/")) {
+  // Don't render sidebar shell on auth or portal login pages
+  if (pathname === "/auth" || pathname.startsWith("/auth/") || pathname === "/portal/login") {
     return <>{children}</>;
   }
 

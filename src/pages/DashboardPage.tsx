@@ -1,19 +1,16 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import {
-  MOCK_CLIENTS,
-  MOCK_PROJECTS,
-  MOCK_SERVICES,
-  MOCK_APPROVALS,
-  MOCK_TASKS,
-  MOCK_ACTIVITY,
-  MOCK_EVENTS,
-  MOCK_INVOICES,
-} from "@/data/mock-data";
+import { useClients } from "@/hooks/useClients";
+import { useProjects } from "@/hooks/useProjects";
+import { useApprovals } from "@/hooks/useApprovals";
+import { useInvoices } from "@/hooks/useInvoices";
+import { useServices } from "@/hooks/useServices";
+import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { formatCurrency, formatDate, formatRelativeDate } from "@/lib/utils";
+import { MOCK_ACTIVITY } from "@/data/mock-data";
 import {
   Users,
   Briefcase,
@@ -25,14 +22,15 @@ import {
   AlertTriangle,
   Layers,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function DashboardPage() {
-  const { workspaceMode, currency, setWorkspaceMode, currentClient } = useAuth();
+  const { workspaceMode, currency, setWorkspaceMode, currentClient, role } = useAuth();
 
   if (workspaceMode === "client") {
-    return <ClientDashboard client={currentClient || MOCK_CLIENTS[0]} currency={currency} />;
+    return <ClientDashboard client={currentClient} currency={currency} role={role} />;
   }
 
   return <AdminDashboard currency={currency} onSwitchToClient={() => setWorkspaceMode("client")} />;
@@ -43,15 +41,20 @@ export function DashboardPage() {
 // ─────────────────────────────────────────────
 
 function AdminDashboard({ currency, onSwitchToClient }: { currency: "ETB" | "USD"; onSwitchToClient: () => void }) {
-  const activeClients = MOCK_CLIENTS.filter((c) => c.status === "active");
-  const activeProjects = MOCK_PROJECTS.filter((p) => p.status === "active" || p.status === "waiting_for_client");
-  const pendingApprovals = MOCK_APPROVALS.filter((a) => a.status === "awaiting_review");
+  const { clients, isLoading: clientsLoading } = useClients();
+  const { projects, isLoading: projectsLoading } = useProjects();
+  const { approvals } = useApprovals();
+  const { invoices } = useInvoices();
+  const { events } = useCalendarEvents();
+
+  const activeClients = clients.filter((c) => c.status === "active");
+  const activeProjects = projects.filter((p) => p.status === "active" || p.status === "waiting_for_client");
+  const pendingApprovals = approvals.filter((a) => a.status === "awaiting_review" || a.status === "pending");
 
   // Outstanding calculation
-  const totalOutstanding = MOCK_INVOICES.filter((i) => i.status === "sent" || i.status === "partially_paid").reduce(
-    (acc, inv) => acc + (inv.total - inv.amount_paid),
-    0
-  );
+  const totalOutstanding = invoices
+    .filter((i) => i.status === "sent" || i.status === "partially_paid")
+    .reduce((acc, inv) => acc + (Number(inv.total || inv.amount || 0) - Number(inv.amount_paid || 0)), 0);
 
   return (
     <motion.div
@@ -84,10 +87,10 @@ function AdminDashboard({ currency, onSwitchToClient }: { currency: "ETB" | "USD
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-3xl font-bold font-mono tracking-tight text-foreground">
-              {activeClients.length}
+              {clientsLoading ? <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /> : activeClients.length}
             </span>
             <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              3 accounts active
+              {activeClients.length} active
             </span>
           </div>
         </div>
@@ -99,10 +102,10 @@ function AdminDashboard({ currency, onSwitchToClient }: { currency: "ETB" | "USD
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-3xl font-bold font-mono tracking-tight text-foreground">
-              {activeProjects.length}
+              {projectsLoading ? <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /> : activeProjects.length}
             </span>
             <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-              5 service streams
+              In progress
             </span>
           </div>
         </div>
@@ -157,8 +160,8 @@ function AdminDashboard({ currency, onSwitchToClient }: { currency: "ETB" | "USD
             </div>
 
             <div className="divide-y divide-border/60">
-              {MOCK_CLIENTS.map((client) => {
-                const clientProjects = MOCK_PROJECTS.filter((p) => p.client_id === client.id);
+              {clients.map((client) => {
+                const clientProjects = projects.filter((p) => p.client_id === client.id);
                 return (
                   <div key={client.id} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="space-y-1 min-w-0">
@@ -186,105 +189,65 @@ function AdminDashboard({ currency, onSwitchToClient }: { currency: "ETB" | "USD
             </div>
           </div>
 
-          {/* Special "Waiting for Client" Highlight */}
-          <div className="p-5 rounded-xl bg-amber-50/50 border border-amber-200/80 space-y-3">
-            <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
-              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-              <span>Operational Notice: Waiting for Client</span>
-            </div>
-            <p className="text-xs text-amber-900/80 leading-relaxed">
-              <strong>Ersas Interiors / Website Development:</strong> Homepage interactive prototype (v3) was submitted on
-              September 17. Frontend development is currently paused awaiting client approval or requested changes.
-            </p>
-            <div className="pt-1 flex items-center gap-3 text-xs">
-              <Link to="/approvals" className="font-semibold text-amber-900 hover:underline">
-                View deliverable submission →
-              </Link>
-              <button
-                onClick={onSwitchToClient}
-                className="font-semibold text-amber-800 underline hover:text-amber-900 cursor-pointer"
-              >
-                Simulate Client Approval
-              </button>
-            </div>
-          </div>
-
-          {/* Today's Tasks */}
-          <div className="p-6 rounded-xl bg-card border border-border/90 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-foreground">Active Tasks & Priorities</h2>
-                <p className="text-xs text-muted-foreground">What needs to be done across current service streams.</p>
+          {/* Attention Required Highlight if any */}
+          {clients.some((c) => c.health_status === "waiting_for_client" || c.health_status === "attention_required") && (
+            <div className="p-5 rounded-xl bg-amber-50/50 border border-amber-200/80 space-y-3">
+              <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                <span>Operational Notice: Action Required</span>
               </div>
-              <Link to="/tasks" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-                View all tasks <ArrowRight className="h-3 w-3" />
-              </Link>
+              <p className="text-xs text-amber-900/80 leading-relaxed">
+                One or more client streams are currently paused awaiting deliverable sign-offs or stakeholder inputs.
+              </p>
+              <div className="pt-1 flex items-center gap-3 text-xs">
+                <Link to="/approvals" className="font-semibold text-amber-900 hover:underline">
+                  Open Approvals Hub ({pendingApprovals.length}) →
+                </Link>
+              </div>
             </div>
-
-            <div className="space-y-2.5">
-              {MOCK_TASKS.slice(0, 4).map((task) => (
-                <div
-                  key={task.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/60 border border-border/60 transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span
-                      className={`h-2 w-2 rounded-full shrink-0 ${
-                        task.priority === "urgent"
-                          ? "bg-rose-500"
-                          : task.priority === "high"
-                          ? "bg-amber-500"
-                          : "bg-neutral-400"
-                      }`}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-foreground truncate">{task.title}</p>
-                      <p className="text-[11px] text-muted-foreground font-mono">Due {formatDate(task.due_date)}</p>
-                    </div>
-                  </div>
-                  <StatusBadge status={task.status} />
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Right Col: Activity Log & Upcoming Events */}
+        {/* Right 1 Col: Production Schedule & Live Log */}
         <div className="space-y-6">
-          {/* Upcoming Schedule */}
           <div className="p-6 rounded-xl bg-card border border-border/90 shadow-2xs space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-foreground">Upcoming Schedule</h2>
+              <h2 className="text-base font-bold text-foreground">Today's Agenda</h2>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </div>
 
             <div className="space-y-3">
-              {MOCK_EVENTS.map((evt) => (
-                <div key={evt.id} className="p-3 rounded-lg bg-secondary/40 border border-border/70 space-y-1">
+              {events.slice(0, 3).map((evt) => (
+                <div key={evt.id} className="p-3 rounded-lg bg-secondary/40 border border-border/60 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-foreground">{evt.title}</span>
-                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-card border border-border text-muted-foreground">
-                      {evt.event_type}
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {formatDate(evt.start_time, "MMM d")}
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground font-mono flex items-center gap-1.5">
-                    <Clock className="h-3 w-3" />
-                    {formatDate(evt.start_datetime, "MMM d, h:mm a")}
-                  </p>
+                  <p className="text-[11px] text-muted-foreground line-clamp-1">{evt.description}</p>
                 </div>
               ))}
             </div>
+
+            <Link
+              to="/calendar"
+              className="w-full block py-2 text-center text-xs font-semibold text-foreground bg-secondary hover:bg-secondary/80 rounded-lg border border-border/80 transition-colors"
+            >
+              Full Calendar & Production Shoots →
+            </Link>
           </div>
 
-          {/* Activity Timeline */}
           <div className="p-6 rounded-xl bg-card border border-border/90 shadow-2xs space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-foreground">Operational Audit Log</h2>
-              <span className="text-[10px] font-mono text-muted-foreground uppercase">Realtime</span>
+              <span className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-bold border border-emerald-200">
+                Live
+              </span>
             </div>
 
-            <div className="relative pl-4 border-l-2 border-border/80 space-y-5">
-              {MOCK_ACTIVITY.map((act) => (
+            <div className="relative pl-4 border-l-2 border-border/80 space-y-4">
+              {MOCK_ACTIVITY.slice(0, 4).map((act) => (
                 <div key={act.id} className="relative group">
                   <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary border-2 border-background" />
                   <p className="text-xs font-medium text-foreground leading-snug">{act.entity_title}</p>
@@ -302,16 +265,32 @@ function AdminDashboard({ currency, onSwitchToClient }: { currency: "ETB" | "USD
 }
 
 // ─────────────────────────────────────────────
-// Client Dashboard (PRD §13 Polished Portal)
+// Client Dashboard (Polished Portal Scoped to Client)
 // ─────────────────────────────────────────────
 
-function ClientDashboard({ client, currency }: { client: typeof MOCK_CLIENTS[0]; currency: "ETB" | "USD" }) {
-  const pendingApprovals = MOCK_APPROVALS.filter((a) => a.status === "awaiting_review");
-  const paidTotal = MOCK_INVOICES.filter((i) => i.status === "paid").reduce((acc, i) => acc + i.total, 0);
-  const remainingTotal = MOCK_INVOICES.filter((i) => i.status === "sent" || i.status === "partially_paid").reduce(
-    (acc, i) => acc + (i.total - i.amount_paid),
-    0
-  );
+function ClientDashboard({ client, currency, role }: { client: any; currency: "ETB" | "USD"; role: string }) {
+  const targetClient = client || {
+    id: "client-solomon",
+    name: "Solomon Gold Mining",
+    industry: "Mining & Resources",
+    description: "Mineral exploration and industrial enterprise portal.",
+  };
+
+  const { approvals } = useApprovals(targetClient.id);
+  const { projects } = useProjects(targetClient.id);
+  const { services } = useServices(undefined, targetClient.id);
+  const { invoices } = useInvoices(targetClient.id);
+  const { events } = useCalendarEvents(targetClient.id);
+
+  const pendingApprovals = approvals.filter((a) => a.status === "awaiting_review" || a.status === "pending");
+  const paidTotal = invoices
+    .filter((i) => i.status === "paid")
+    .reduce((acc, i) => acc + Number(i.total || i.amount || 0), 0);
+  const remainingTotal = invoices
+    .filter((i) => i.status === "sent" || i.status === "partially_paid")
+    .reduce((acc, i) => acc + (Number(i.total || i.amount || 0) - Number(i.amount_paid || 0)), 0);
+
+  const isClientMember = role === "client_member";
 
   return (
     <motion.div
@@ -326,32 +305,32 @@ function ClientDashboard({ client, currency }: { client: typeof MOCK_CLIENTS[0];
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono uppercase tracking-widest text-primary font-bold">Client Workspace</span>
             <span className="text-muted-foreground">•</span>
-            <span className="text-xs text-muted-foreground font-medium">Digital Growth & Brand Development</span>
+            <span className="text-xs text-muted-foreground font-medium">{targetClient.industry}</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">{client.name}</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl">{client.description}</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">{targetClient.name}</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl">{targetClient.description}</p>
         </div>
 
         <div className="p-4 rounded-xl bg-secondary/60 border border-border/80 shrink-0 min-w-56 space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground font-semibold">Overall Progress</span>
+            <span className="text-muted-foreground font-semibold">Overall Delivery</span>
             <span className="font-mono font-bold text-foreground text-sm">78%</span>
           </div>
           <ProgressBar value={78} showValue={false} />
         </div>
       </div>
 
-      {/* Action Required Banner (PRD requirement: "ACTION REQUIRED: 2 approvals") */}
-      {pendingApprovals.length > 0 && (
+      {/* Action Required Banner for Client Owner */}
+      {pendingApprovals.length > 0 && !isClientMember && (
         <div className="p-5 rounded-xl bg-amber-50 border border-amber-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-800 font-bold shrink-0">
               <Sparkles className="h-5 w-5 text-amber-700" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-amber-950">Action Required: Pending Review & Approvals</h2>
+              <h2 className="text-sm font-bold text-amber-950">Action Required: Deliverables Awaiting Sign-Off</h2>
               <p className="text-xs text-amber-800 mt-0.5">
-                {pendingApprovals.length} item(s) are awaiting your sign-off to proceed to the next phase.
+                {pendingApprovals.length} item(s) are awaiting your formal approval or change request.
               </p>
             </div>
           </div>
@@ -368,8 +347,8 @@ function ClientDashboard({ client, currency }: { client: typeof MOCK_CLIENTS[0];
       <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-bold text-foreground">Active Work by Service Stream</h2>
-            <p className="text-xs text-muted-foreground">Click any service to view its full permanent record and outputs.</p>
+            <h2 className="text-base font-bold text-foreground">Active Work Streams</h2>
+            <p className="text-xs text-muted-foreground">Detailed records of deliverables and technical outputs.</p>
           </div>
           <Link to="/projects" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
             All Workspaces <ArrowRight className="h-3 w-3" />
@@ -377,7 +356,7 @@ function ClientDashboard({ client, currency }: { client: typeof MOCK_CLIENTS[0];
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {MOCK_SERVICES.map((srv) => (
+          {services.map((srv) => (
             <Link
               key={srv.id}
               to="/projects"
@@ -398,14 +377,14 @@ function ClientDashboard({ client, currency }: { client: typeof MOCK_CLIENTS[0];
               </p>
 
               <div className="space-y-1 pt-1">
-                <ProgressBar value={srv.progress} label="Phase Completion" />
+                <ProgressBar value={srv.progress} label="Phase Progress" />
               </div>
             </Link>
           ))}
         </div>
       </div>
 
-      {/* Up Next & Financial Status (PRD layout) */}
+      {/* Up Next & Financial Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Up Next */}
         <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
@@ -415,7 +394,7 @@ function ClientDashboard({ client, currency }: { client: typeof MOCK_CLIENTS[0];
           </div>
 
           <div className="space-y-3">
-            {MOCK_EVENTS.filter((e) => e.visibility === "client").map((evt) => (
+            {events.slice(0, 3).map((evt) => (
               <div key={evt.id} className="p-3.5 rounded-xl bg-secondary/40 border border-border/70 flex items-center justify-between">
                 <div className="space-y-0.5">
                   <p className="text-xs font-bold text-foreground">{evt.title}</p>
@@ -423,10 +402,7 @@ function ClientDashboard({ client, currency }: { client: typeof MOCK_CLIENTS[0];
                 </div>
                 <div className="text-right shrink-0">
                   <span className="text-xs font-mono font-bold text-primary block">
-                    {formatDate(evt.start_datetime, "MMM d")}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground font-mono">
-                    {formatDate(evt.start_datetime, "h:mm a")}
+                    {formatDate(evt.start_time, "MMM d")}
                   </span>
                 </div>
               </div>
@@ -434,33 +410,35 @@ function ClientDashboard({ client, currency }: { client: typeof MOCK_CLIENTS[0];
           </div>
         </div>
 
-        {/* Financial Summary */}
-        <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-foreground">Payment Status</h2>
-            <Link to="/payments" className="text-xs font-semibold text-primary hover:underline">
-              View invoices →
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-1">
-              <span className="text-[11px] font-semibold text-emerald-800 uppercase font-mono">Paid to Date</span>
-              <p className="text-2xl font-bold font-mono text-emerald-950">
-                {formatCurrency(paidTotal, currency)}
-              </p>
-              <span className="text-[10px] text-emerald-700">Kickoff Advance Verified</span>
+        {/* Financial Summary (Hidden from client_member) */}
+        {!isClientMember && (
+          <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Payment Status</h2>
+              <Link to="/payments" className="text-xs font-semibold text-primary hover:underline">
+                View statement →
+              </Link>
             </div>
 
-            <div className="p-4 rounded-xl bg-secondary/60 border border-border space-y-1">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase font-mono">Remaining Balance</span>
-              <p className="text-2xl font-bold font-mono text-foreground">
-                {formatCurrency(remainingTotal, currency)}
-              </p>
-              <span className="text-[10px] text-muted-foreground">Due at Final Delivery</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-1">
+                <span className="text-[11px] font-semibold text-emerald-800 uppercase font-mono">Paid to Date</span>
+                <p className="text-2xl font-bold font-mono text-emerald-950">
+                  {formatCurrency(paidTotal, currency)}
+                </p>
+                <span className="text-[10px] text-emerald-700">Verified Milestone Deposits</span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-secondary/60 border border-border space-y-1">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase font-mono">Remaining Balance</span>
+                <p className="text-2xl font-bold font-mono text-foreground">
+                  {formatCurrency(remainingTotal, currency)}
+                </p>
+                <span className="text-[10px] text-muted-foreground">Due upon Milestone Delivery</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </motion.div>
   );

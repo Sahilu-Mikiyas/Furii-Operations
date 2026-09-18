@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { MOCK_CLIENTS, MOCK_PROJECTS } from "@/data/mock-data";
+import { Navigate, Link } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
+import { useClients } from "@/hooks/useClients";
+import { useProjects } from "@/hooks/useProjects";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate } from "@/lib/utils";
+import type { ClientHealthStatus } from "@/types";
+import { toast } from "sonner";
 import {
   Building2,
   Search,
@@ -10,20 +15,31 @@ import {
   Globe,
   MapPin,
   ExternalLink,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function ClientsPage() {
+  const { role, setCurrentClient, setWorkspaceMode } = useAuth();
+  const { clients, createClient, updateHealth, isCreating } = useClients();
+  const { projects } = useProjects();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [isCreating, setIsCreating] = useState(false);
-  const [clients, setClients] = useState(MOCK_CLIENTS);
+  const [showModal, setShowModal] = useState(false);
 
   // New Client Form State
   const [newName, setNewName] = useState("");
   const [newIndustry, setNewIndustry] = useState("");
   const [newWebsite, setNewWebsite] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  // Restrict client roles from seeing all agency clients
+  if (role === "client_owner" || role === "client_member") {
+    return <Navigate to="/" replace />;
+  }
 
   const filteredClients = clients.filter((c) => {
     const matchesSearch =
@@ -33,31 +49,46 @@ export function ClientsPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleCreateClient = (e: React.FormEvent) => {
+  const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
+    setSubmitting(true);
 
-    const created = {
-      id: `client-${Date.now()}`,
-      organization_id: "furii-org-01",
-      name: newName,
-      slug: newName.toLowerCase().replace(/\s+/g, "-"),
-      industry: newIndustry || "Technology & Design",
-      description: newDesc || "Client onboarded into Furii operations.",
-      website: newWebsite || "https://example.com",
-      status: "active" as const,
-      health_status: "on_track" as const,
-      start_date: new Date().toISOString().split("T")[0],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    try {
+      await createClient({
+        name: newName,
+        industry: newIndustry || "Digital Services",
+        description: newDesc || "Client onboarded into Furii operations.",
+        website: newWebsite || null,
+        status: "active",
+        health_status: "on_track",
+      });
 
-    setClients([created, ...clients]);
-    setNewName("");
-    setNewIndustry("");
-    setNewWebsite("");
-    setNewDesc("");
-    setIsCreating(false);
+      toast.success(`Client "${newName}" onboarded successfully.`);
+      setNewName("");
+      setNewIndustry("");
+      setNewWebsite("");
+      setNewDesc("");
+      setShowModal(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create client.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleHealthChange = async (clientId: string, health_status: ClientHealthStatus) => {
+    try {
+      await updateHealth({ id: clientId, health_status });
+      toast.success("Client health status updated.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update status.");
+    }
+  };
+
+  const handleOpenClientWorkspace = (client: any) => {
+    setCurrentClient(client);
+    setWorkspaceMode("client");
   };
 
   return (
@@ -68,11 +99,11 @@ export function ClientsPage() {
       className="space-y-6"
     >
       <PageHeader
-        title="Client Accounts"
-        description="Comprehensive management of client profiles, company contacts, and operational health."
+        title="Client Directory"
+        description="Operational accounts, company profiles, and real-time project streams."
         actions={
           <button
-            onClick={() => setIsCreating(true)}
+            onClick={() => setShowModal(true)}
             className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
           >
             <Plus className="h-4 w-4" />
@@ -99,9 +130,9 @@ export function ClientsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-xs bg-secondary/70 border border-border/80 rounded-lg px-2.5 py-1.5 text-foreground focus:outline-hidden cursor-pointer"
+            className="text-xs bg-secondary/50 border border-border/80 rounded-lg px-2.5 py-1 text-foreground focus:outline-hidden"
           >
-            <option value="all">All Clients</option>
+            <option value="all">All Accounts</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
             <option value="archived">Archived</option>
@@ -109,141 +140,150 @@ export function ClientsPage() {
         </div>
       </div>
 
-      {/* Create Client Modal */}
-      {isCreating && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-2xl p-6 space-y-4">
-            <h2 className="text-lg font-bold text-foreground">Onboard New Client</h2>
-            <form onSubmit={handleCreateClient} className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-foreground block mb-1">Company Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Apex Hospitality Group"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-foreground block mb-1">Industry</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Luxury Real Estate & Hotels"
-                  value={newIndustry}
-                  onChange={(e) => setNewIndustry(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-foreground block mb-1">Website URL</label>
-                <input
-                  type="url"
-                  placeholder="https://apexhospitality.com"
-                  value={newWebsite}
-                  onChange={(e) => setNewWebsite(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-foreground block mb-1">Brief Description</label>
-                <textarea
-                  rows={3}
-                  placeholder="Core business, target audience, and primary engagement scope..."
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setIsCreating(false)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-secondary cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
-                >
-                  Create Account
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Clients Grid */}
+      {/* Clients Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filteredClients.map((client) => {
-          const clientProjects = MOCK_PROJECTS.filter((p) => p.client_id === client.id);
+          const clientProjects = projects.filter((p) => p.client_id === client.id);
 
           return (
             <div
               key={client.id}
-              className="p-5 rounded-2xl bg-card border border-border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+              className="p-5 rounded-2xl bg-card border border-border/90 hover:border-primary/40 transition-all shadow-2xs space-y-4 flex flex-col justify-between"
             >
               <div className="space-y-3">
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-secondary flex items-center justify-center text-primary font-bold text-sm border border-border">
-                      <Building2 className="h-5 w-5" />
+                    <div className="h-10 w-10 rounded-xl bg-secondary border border-border flex items-center justify-center font-bold text-sm text-foreground">
+                      {client.name.slice(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-foreground">{client.name}</h3>
-                      <p className="text-[11px] text-muted-foreground">{client.industry}</p>
+                      <h3 className="text-sm font-bold text-foreground leading-snug">{client.name}</h3>
+                      <p className="text-xs text-muted-foreground truncate">{client.industry}</p>
                     </div>
                   </div>
-                  <StatusBadge status={client.health_status || "on_track"} />
+                  <StatusBadge status={client.status} />
                 </div>
 
                 <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                  {client.description}
+                  {client.description || "No description provided."}
                 </p>
 
-                <div className="space-y-1.5 pt-2 border-t border-border/60 text-[11px] text-muted-foreground">
-                  {client.website && (
-                    <div className="flex items-center gap-2">
-                      <Globe className="h-3 w-3 shrink-0" />
-                      <a
-                        href={client.website}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="hover:underline text-foreground truncate flex items-center gap-1"
-                      >
-                        {client.website.replace(/^https?:\/\//, "")}
-                        <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
-                      </a>
-                    </div>
-                  )}
-                  {client.address && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{client.address}</span>
-                    </div>
-                  )}
+                {/* Operational Health Selector */}
+                <div className="pt-1 flex items-center justify-between text-xs bg-secondary/40 p-2 rounded-lg border border-border/60">
+                  <span className="text-[11px] font-semibold text-muted-foreground font-mono">Health:</span>
+                  <select
+                    value={client.health_status || "on_track"}
+                    onChange={(e) => handleHealthChange(client.id, e.target.value as ClientHealthStatus)}
+                    className="text-[11px] font-medium bg-transparent text-foreground cursor-pointer focus:outline-hidden"
+                  >
+                    <option value="on_track">🟢 On Track</option>
+                    <option value="waiting_for_client">🟡 Waiting for Client</option>
+                    <option value="attention_required">🟠 Attention Required</option>
+                    <option value="delayed">🔴 Delayed</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-border/60 flex items-center justify-between text-xs">
-                <span className="font-mono text-muted-foreground">
-                  {clientProjects.length} active project(s)
+              <div className="pt-3 border-t border-border/80 flex items-center justify-between text-xs">
+                <span className="font-mono text-muted-foreground font-medium">
+                  {clientProjects.length} Active Project(s)
                 </span>
-                <span className="text-[11px] text-muted-foreground">
-                  Since {formatDate(client.start_date, "MMM yyyy")}
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleOpenClientWorkspace(client)}
+                    className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-secondary hover:bg-secondary/80 text-foreground transition-colors cursor-pointer"
+                  >
+                    Client View
+                  </button>
+                  <Link
+                    to="/projects"
+                    className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    Workspaces →
+                  </Link>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* New Client Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <h2 className="text-base font-bold text-foreground">Onboard New Client Account</h2>
+            <form onSubmit={handleCreateClient} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Company Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g. Oromia Agro Industry"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Industry</label>
+                <input
+                  type="text"
+                  value={newIndustry}
+                  onChange={(e) => setNewIndustry(e.target.value)}
+                  placeholder="e.g. Agriculture & Export"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Website URL</label>
+                <input
+                  type="url"
+                  value={newWebsite}
+                  onChange={(e) => setNewWebsite(e.target.value)}
+                  placeholder="https://company.com"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Operational Scope</label>
+                <textarea
+                  rows={3}
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  placeholder="Summary of retained digital assistance services..."
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Create Client
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   );
 }
