@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard,
@@ -25,8 +25,8 @@ const CLIENT_NAV = [
 
 export function ClientSidebar() {
   const { currentClient, setWorkspaceMode } = useAuth();
-  const routerState = useRouterState();
-  const currentPath = routerState.location.pathname;
+  const location = useLocation();
+  const currentPath = location.pathname;
 
   const pendingApprovalsCount = MOCK_APPROVALS.filter(
     (a) => a.status === "awaiting_review"
@@ -113,7 +113,7 @@ export function ClientSidebar() {
       <div className="p-3 border-t border-border/80 bg-sidebar">
         <button
           onClick={() => setWorkspaceMode("admin")}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground bg-secondary hover:bg-secondary/80 rounded-lg transition-colors border border-border"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground bg-secondary hover:bg-secondary/80 rounded-lg transition-colors border border-border cursor-pointer"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Admin Operations

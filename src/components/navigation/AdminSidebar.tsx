@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard,
@@ -31,8 +31,8 @@ const NAV_ITEMS = [
 
 export function AdminSidebar() {
   const { user, setWorkspaceMode } = useAuth();
-  const routerState = useRouterState();
-  const currentPath = routerState.location.pathname;
+  const location = useLocation();
+  const currentPath = location.pathname;
 
   return (
     <aside className="w-64 border-r border-border bg-sidebar flex flex-col shrink-0 h-screen sticky top-0 select-none z-20">
@@ -84,7 +84,7 @@ export function AdminSidebar() {
       <div className="p-3 border-t border-border/80 space-y-2 bg-sidebar">
         <button
           onClick={() => setWorkspaceMode("client")}
-          className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground bg-secondary/50 hover:bg-secondary rounded-lg transition-colors border border-border/60"
+          className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground bg-secondary/50 hover:bg-secondary rounded-lg transition-colors border border-border/60 cursor-pointer"
         >
           <span className="flex items-center gap-2">
             <ExternalLink className="h-3.5 w-3.5 text-primary" />

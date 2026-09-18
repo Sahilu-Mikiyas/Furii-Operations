@@ -2,14 +2,14 @@ import React from "react";
 import { useAuth } from "@/lib/auth";
 import { AdminLayout } from "@/layouts/AdminLayout";
 import { ClientLayout } from "@/layouts/ClientLayout";
-import { useRouterState } from "@tanstack/react-router";
+import { useLocation } from "react-router-dom";
 
 export function NavShell({ children }: { children: React.ReactNode }) {
   const { workspaceMode } = useAuth();
-  const routerState = useRouterState();
-  const pathname = routerState.location.pathname;
+  const location = useLocation();
+  const pathname = location.pathname;
 
-  // Don't render shell on auth pages
+  // Don't render sidebar shell on auth pages
   if (pathname === "/auth" || pathname.startsWith("/auth/")) {
     return <>{children}</>;
   }

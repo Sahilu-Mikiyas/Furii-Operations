@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { Command } from "cmdk";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "react-router-dom";
 import {
   MOCK_CLIENTS,
   MOCK_PROJECTS,
@@ -45,7 +45,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   const handleSelect = (path: string) => {
     onOpenChange(false);
-    navigate({ to: path });
+    navigate(path);
   };
 
   return (
