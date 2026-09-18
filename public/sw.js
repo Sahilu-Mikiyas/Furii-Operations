@@ -113,14 +113,11 @@ function createAuthExpiredResponse() {
 </head>
 <body>
   <div class="card">
-    <h1>⚠️ Preview Session Expired</h1>
+    <h1>⚠️ Offline or Session Expired</h1>
     <p>
-      The Lovable preview authentication token has expired for this PWA window.
-      <br><br>
-      To fix this, publish the app publicly in Lovable or log back in via your browser.
+      Please check your network connection or sign in again to continue.
     </p>
     <button class="btn" onclick="window.location.reload()">Reload App</button>
-    <a class="btn btn-secondary" href="https://lovable.dev" target="_blank" rel="noopener">Open Lovable</a>
   </div>
 </body>
 </html>`;

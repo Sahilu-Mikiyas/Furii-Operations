@@ -51,9 +51,9 @@ Each workspace maintains 7 distinct operational facets:
 
 ## ✦ Technology Stack
 
-- **Framework**: React 19 + TypeScript + Vite + TanStack Start (SSR)
-- **Routing**: TanStack Router (File-based routing)
-- **State & Data**: TanStack Query
+- **Framework**: React 19 + TypeScript + Vite SPA
+- **Routing**: React Router v7 (`react-router-dom`)
+- **State & Data**: TanStack Query (`@tanstack/react-query`)
 - **Styling**: Tailwind CSS v4 + Design System (Neutral light palette `#F7F7F5`, `#FFFFFF`, `#111111`)
 - **UI Components**: Radix UI (shadcn/ui primitives) + Lucide Icons + cmdk
 - **Animation**: Framer Motion
