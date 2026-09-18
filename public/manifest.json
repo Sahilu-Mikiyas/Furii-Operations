@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "Mission Poland Command Center",
+  "short_name": "Mission Poland",
+  "description": "Personal mission command system for relocating to Poznań, Poland by March 2027.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
+  "orientation": "portrait-primary",
+  "background_color": "#0F1115",
+  "theme_color": "#0F1115",
+  "categories": ["productivity", "business", "finance"],
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

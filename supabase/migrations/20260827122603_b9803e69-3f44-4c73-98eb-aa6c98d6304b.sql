@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.bootstrap_mission() FROM anon;

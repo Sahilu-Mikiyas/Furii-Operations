@@ -1,0 +1,1 @@
+import{c as e,r as a}from"./auth-middleware-C-3H9MTL.js";import{h as c}from"./index-CQp-ZUu4.js";const t=e({method:"POST"}).middleware([a]).handler(c("da53c5d0f4076d0c477e947395ca7f5455a61a2d12e929a5f86b77f597cab859")),m=e({method:"POST"}).middleware([a]).handler(c("bad377eec226e58ad299461234def913d12c3f93800d518bcfbb5bc1c257c015"));export{t as s,m as u};
