@@ -11,7 +11,8 @@ export function useCalendarEvents(clientId?: string) {
   const query = useQuery({
     queryKey: ["calendar_events", clientId || "all", role, user?.id],
     queryFn: async (): Promise<Event[]> => {
-      let req = supabase.from("calendar_events").select("*").order("start_time", { ascending: true });
+      let req = supabase.from("calendar_events").select("*").order("start_datetime", { ascending: true });
+
 
       if (clientId) {
         req = req.eq("client_id", clientId);

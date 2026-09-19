@@ -14,10 +14,14 @@ export function useClients() {
         .is("deleted_at", null)
         .order("name", { ascending: true });
 
-      if (error) throw new Error(error.message);
+      if (error) {
+        console.error("Clients query error:", error.message);
+        return [];
+      }
       return (data || []) as Client[];
     },
   });
+
 
   const createClientMutation = useMutation({
     mutationFn: async (newClient: Partial<Client>) => {

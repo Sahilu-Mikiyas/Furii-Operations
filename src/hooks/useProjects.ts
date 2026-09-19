@@ -15,10 +15,14 @@ export function useProjects(clientId?: string) {
         .order("created_at", { ascending: false });
       if (clientId) req = req.eq("client_id", clientId);
       const { data, error } = await req;
-      if (error) throw new Error(error.message);
+      if (error) {
+        console.error("Projects query error:", error.message);
+        return [];
+      }
       return (data || []) as Project[];
     },
   });
+
 
 
 

@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
 import { useRealtimeSync } from "@/hooks/useRealtime";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
+
 
 // Guards
 import { AdminGuard, ClientGuard, RootRedirect } from "@/components/routes/RoleGuards";
@@ -210,15 +212,18 @@ function AppRoutes() {
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-          <Toaster position="top-center" richColors />
-        </BrowserRouter>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <BrowserRouter>
+            <AppRoutes />
+            <Toaster position="top-center" richColors />
+          </BrowserRouter>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
+
 
 export default App;
