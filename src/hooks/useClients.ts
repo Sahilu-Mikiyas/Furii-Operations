@@ -69,11 +69,94 @@ export function useClients() {
     },
   });
 
+  const updateClientMutation = useMutation({
+
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Client> }) => {
+      const { data, error } = await supabase
+        .from("clients")
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+
+  const archiveClientMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .from("clients")
+        .update({
+          status: "archived",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+
+  const deleteClientMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("clients")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+
+  const provisionAccountMutation = useMutation({
+    mutationFn: async ({
+      email,
+      password,
+      fullName,
+      clientId,
+    }: {
+      email: string;
+      password: string;
+      fullName: string;
+      clientId: string;
+    }) => {
+      const { data, error } = await supabase.rpc("provision_client_account", {
+        p_email: email,
+        p_password: password,
+        p_full_name: fullName,
+        p_client_id: clientId,
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   return {
     ...query,
     clients: query.data || [],
     createClient: createClientMutation.mutateAsync,
+    updateClient: updateClientMutation.mutateAsync,
+    archiveClient: archiveClientMutation.mutateAsync,
+    deleteClient: deleteClientMutation.mutateAsync,
     updateHealth: updateHealthMutation.mutateAsync,
+    provisionAccount: provisionAccountMutation.mutateAsync,
     isCreating: createClientMutation.isPending,
+    isUpdating: updateClientMutation.isPending,
+    isProvisioning: provisionAccountMutation.isPending,
   };
 }
+

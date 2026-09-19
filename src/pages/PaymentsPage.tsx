@@ -2,46 +2,135 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useProjects } from "@/hooks/useProjects";
+import { useClients } from "@/hooks/useClients";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Plus, Download, CheckCircle2, ShieldAlert, Loader2, Receipt } from "lucide-react";
+import {
+  Plus,
+  CheckCircle2,
+  ShieldAlert,
+  Loader2,
+  Trash2,
+  X,
+  Receipt,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import type { PaymentMethod } from "@/types";
 
 export function PaymentsPage() {
   const { currency, setCurrency, role, currentClient } = useAuth();
-  const targetClientId = role === "client_owner" ? currentClient?.id : undefined;
-  const { invoices, payments, recordPayment, isRecordingPayment, isLoading } = useInvoices(targetClientId);
-  const { projects } = useProjects(targetClientId);
+  const isManager = role === "manager" || role === "super_admin" || role === "admin";
+  const targetClientId = role === "client_owner" || role === "client_member" ? currentClient?.id : undefined;
 
+  const {
+    invoices,
+    payments,
+    recordPayment,
+    createInvoice,
+    deleteInvoice,
+    isRecordingPayment,
+    isCreatingInvoice,
+    isLoading,
+  } = useInvoices(targetClientId);
+
+  const { projects } = useProjects(targetClientId);
+  const { clients } = useClients();
+
+  // Modals state
+  const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
   const [recordModalInvoiceId, setRecordModalInvoiceId] = useState<string | null>(null);
+
+  // New Invoice Form State
+  const [invClientId, setInvClientId] = useState("");
+  const [invProjectId, setInvProjectId] = useState("");
+  const [invNumber, setInvNumber] = useState(`INV-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(3, "0")}`);
+  const [invTitle, setInvTitle] = useState("");
+  const [invDueDate, setInvDueDate] = useState("");
+  const [invNotes, setInvNotes] = useState("");
+  const [lineItems, setLineItems] = useState([
+    { description: "Milestone Deliverable Execution", quantity: 1, unit_price: 50000 },
+  ]);
+
+  // Record Payment Form State
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<PaymentMethod>("bank_transfer");
   const [payRef, setPayRef] = useState("");
 
-  // Role Restriction Check
-  if (role === "team_member" || role === "client_member") {
-    return (
-      <div className="p-12 text-center bg-card rounded-2xl border border-border space-y-3 max-w-lg mx-auto my-12">
-        <ShieldAlert className="w-10 h-10 text-amber-600 mx-auto" />
-        <h2 className="text-base font-bold text-foreground">Financial Access Restricted</h2>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Billing records, contract amounts, and invoice balances are restricted to executive stakeholders and authorized
-          financial leads.
-        </p>
-      </div>
-    );
-  }
-
-  const totalContract = projects.reduce((acc, p) => acc + Number(p.budget || 0), 0) || 850000;
+  const totalContract = projects.reduce((acc, p) => acc + Number(p.budget || 0), 0);
   const totalPaid = invoices
     .filter((i) => i.status === "paid")
     .reduce((acc, i) => acc + Number(i.total || i.amount || 0), 0);
   const totalOutstanding = invoices
-    .filter((i) => i.status === "sent" || i.status === "partially_paid")
+    .filter((i) => i.status === "sent" || i.status === "partially_paid" || i.status === "draft")
     .reduce((acc, i) => acc + (Number(i.total || i.amount || 0) - Number(i.amount_paid || 0)), 0);
+
+  const calculatedTotal = lineItems.reduce((acc, item) => acc + Number(item.quantity) * Number(item.unit_price), 0);
+
+  const handleAddLineItem = () => {
+    setLineItems([...lineItems, { description: "", quantity: 1, unit_price: 0 }]);
+  };
+
+  const handleRemoveLineItem = (index: number) => {
+    if (lineItems.length <= 1) return;
+    setLineItems(lineItems.filter((_, idx) => idx !== index));
+  };
+
+  const handleLineItemChange = (index: number, field: string, value: any) => {
+    const updated = [...lineItems];
+    updated[index] = { ...updated[index], [field]: value };
+    setLineItems(updated);
+  };
+
+  const handleCreateInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetClient = invClientId || clients[0]?.id;
+    if (!targetClient) {
+      toast.error("Please select a target client.");
+      return;
+    }
+    if (!invTitle.trim()) {
+      toast.error("Invoice title / description is required.");
+      return;
+    }
+
+    try {
+      await createInvoice({
+        clientId: targetClient,
+        projectId: invProjectId || undefined,
+        invoiceNumber: invNumber,
+        title: invTitle,
+        total: calculatedTotal,
+        currency,
+        dueDate: invDueDate || undefined,
+        notes: invNotes || undefined,
+        items: lineItems.map((itm) => ({
+          description: itm.description || "Service Item",
+          quantity: Number(itm.quantity) || 1,
+          unit_price: Number(itm.unit_price) || 0,
+        })),
+      });
+
+      toast.success(`Invoice ${invNumber} issued successfully.`);
+      setShowCreateInvoiceModal(false);
+      setInvTitle("");
+      setInvNotes("");
+      setInvNumber(`INV-${new Date().getFullYear()}-${String(invoices.length + 2).padStart(3, "0")}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create invoice.");
+    }
+  };
+
+  const handleDeleteInvoice = async (id: string, number: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete invoice ${number}?`)) return;
+    try {
+      await deleteInvoice(id);
+      toast.success(`Invoice ${number} deleted.`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete invoice.");
+    }
+  };
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +187,16 @@ export function PaymentsPage() {
                 USD
               </button>
             </div>
+
+            {isManager && (
+              <button
+                onClick={() => setShowCreateInvoiceModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Issue Invoice
+              </button>
+            )}
           </div>
         }
       />
@@ -139,14 +238,27 @@ export function PaymentsPage() {
       <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <h2 className="text-base font-bold text-foreground">Invoices & Milestones</h2>
-            <p className="text-xs text-muted-foreground">Formal statements issued against project deliverables.</p>
+            <h2 className="text-base font-bold text-foreground">Invoices & Statements</h2>
+            <p className="text-xs text-muted-foreground">Formal billing statements issued against project scopes.</p>
           </div>
+          {isManager && (
+            <button
+              onClick={() => setShowCreateInvoiceModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground transition-colors border border-border cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Invoice
+            </button>
+          )}
         </div>
 
         {isLoading ? (
           <div className="p-8 flex justify-center text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin" />
+          </div>
+        ) : invoices.length === 0 ? (
+          <div className="p-10 text-center bg-secondary/20 rounded-xl border border-dashed border-border text-xs text-muted-foreground">
+            No invoices issued yet.
           </div>
         ) : (
           <div className="divide-y divide-border/60">
@@ -179,17 +291,29 @@ export function PaymentsPage() {
                       )}
                     </div>
 
-                    {!isPaid && (role === "super_admin" || role === "admin") && (
-                      <button
-                        onClick={() => {
-                          setRecordModalInvoiceId(inv.id);
-                          setPayAmount(String(amount - Number(inv.amount_paid || 0)));
-                        }}
-                        className="px-3 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
-                      >
-                        Record Payment
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {!isPaid && isManager && (
+                        <button
+                          onClick={() => {
+                            setRecordModalInvoiceId(inv.id);
+                            setPayAmount(String(amount - Number(inv.amount_paid || 0)));
+                          }}
+                          className="px-3 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
+                        >
+                          Record Payment
+                        </button>
+                      )}
+
+                      {isManager && (
+                        <button
+                          onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors border border-border cursor-pointer"
+                          title="Delete invoice"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -197,6 +321,208 @@ export function PaymentsPage() {
           </div>
         )}
       </div>
+
+      {/* Verified Payments Ledger */}
+      {payments.length > 0 && (
+        <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
+          <div className="flex items-center gap-2">
+            <Receipt className="w-4 h-4 text-emerald-600" />
+            <h2 className="text-base font-bold text-foreground">Payment Records Ledger</h2>
+          </div>
+          <div className="divide-y divide-border/60">
+            {payments.map((pay) => (
+              <div key={pay.id} className="py-3 flex items-center justify-between text-xs">
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {pay.reference || "Bank Wire Transfer"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground font-mono">
+                    {formatDate(pay.payment_date)} • Method: {pay.method.replace("_", " ")}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="font-mono font-bold text-emerald-600">
+                    +{formatCurrency(pay.amount, currency)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Issue Invoice Modal */}
+      {showCreateInvoiceModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Issue Invoice / Statement</h2>
+              <button onClick={() => setShowCreateInvoiceModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateInvoice} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Target Client</label>
+                  <select
+                    value={invClientId}
+                    onChange={(e) => setInvClientId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Associated Project</label>
+                  <select
+                    value={invProjectId}
+                    onChange={(e) => setInvProjectId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="">General Client Retainer</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Invoice Number</label>
+                  <input
+                    type="text"
+                    required
+                    value={invNumber}
+                    onChange={(e) => setInvNumber(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground font-mono focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={invDueDate}
+                    onChange={(e) => setInvDueDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Invoice Title / Summary</label>
+                <input
+                  type="text"
+                  required
+                  value={invTitle}
+                  onChange={(e) => setInvTitle(e.target.value)}
+                  placeholder="e.g. Phase 1 - UX Discovery & Design Milestone"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              {/* Line Items */}
+              <div className="space-y-2 pt-2 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-foreground">Line Items</label>
+                  <button
+                    type="button"
+                    onClick={handleAddLineItem}
+                    className="text-xs text-primary hover:underline font-semibold"
+                  >
+                    + Add Item
+                  </button>
+                </div>
+
+                {lineItems.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Item description"
+                      value={item.description}
+                      onChange={(e) => handleLineItemChange(idx, "description", e.target.value)}
+                      className="flex-1 px-2.5 py-1.5 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="Qty"
+                      value={item.quantity}
+                      onChange={(e) => handleLineItemChange(idx, "quantity", Number(e.target.value))}
+                      className="w-16 px-2 py-1.5 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden text-center"
+                    />
+                    <input
+                      type="number"
+                      step="100"
+                      placeholder="Price"
+                      value={item.unit_price}
+                      onChange={(e) => handleLineItemChange(idx, "unit_price", Number(e.target.value))}
+                      className="w-28 px-2 py-1.5 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                    />
+                    {lineItems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveLineItem(idx)}
+                        className="p-1.5 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                <div className="pt-2 text-right">
+                  <span className="text-xs text-muted-foreground mr-2">Total Amount:</span>
+                  <span className="text-base font-bold font-mono text-foreground">
+                    {formatCurrency(calculatedTotal, currency)}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Notes / Wire Instructions</label>
+                <textarea
+                  rows={2}
+                  value={invNotes}
+                  onChange={(e) => setInvNotes(e.target.value)}
+                  placeholder="Payment details or terms..."
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateInvoiceModal(false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingInvoice}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {isCreatingInvoice && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Issue Statement
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       {/* Record Payment Modal */}
       {recordModalInvoiceId && (
@@ -206,7 +532,12 @@ export function PaymentsPage() {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
           >
-            <h2 className="text-base font-bold text-foreground">Record Verified Payment</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Record Verified Payment</h2>
+              <button onClick={() => setRecordModalInvoiceId(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <form onSubmit={handleRecordPayment} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-foreground mb-1">Amount Paid ({currency})</label>

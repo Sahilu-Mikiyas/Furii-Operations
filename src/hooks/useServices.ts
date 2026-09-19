@@ -43,9 +43,59 @@ export function useServices(projectId?: string, clientId?: string) {
     },
   });
 
+  const createServiceMutation = useMutation({
+    mutationFn: async (newService: Partial<Service>) => {
+      let orgId = newService.organization_id;
+      if (!orgId) {
+        const { data: org } = await supabase.from("organizations").select("id").limit(1).single();
+        orgId = org?.id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29";
+      }
+
+      const payload = {
+        organization_id: orgId,
+        project_id: newService.project_id,
+        client_id: newService.client_id,
+        service_type: newService.service_type || "website",
+        name: newService.name,
+        description: newService.description || "",
+        status: newService.status || "in_progress",
+        current_phase: newService.current_phase || "Discovery & Planning",
+        progress: newService.progress || 0,
+        start_date: newService.start_date || new Date().toISOString().split("T")[0],
+      };
+
+      const { data, error } = await supabase.from("services").insert(payload).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+
+  const deleteServiceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("services")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+
   return {
     ...query,
     services: query.data || [],
     updateProgress: updateProgressMutation.mutateAsync,
+    createService: createServiceMutation.mutateAsync,
+    deleteService: deleteServiceMutation.mutateAsync,
+    isCreatingService: createServiceMutation.isPending,
   };
 }
+

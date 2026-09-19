@@ -65,11 +65,24 @@ export function useCalendarEvents(clientId?: string) {
     },
   });
 
+  const deleteEventMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("calendar_events").delete().eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar_events"] });
+    },
+  });
+
   return {
     ...query,
     events: query.data || [],
     createEvent: createEventMutation.mutateAsync,
+    deleteEvent: deleteEventMutation.mutateAsync,
     isCreating: createEventMutation.isPending,
     canCreate: !isClientRole,
   };
 }
+

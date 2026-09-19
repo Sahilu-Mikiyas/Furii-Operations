@@ -13,6 +13,7 @@ import {
   Loader2,
   ShieldCheck,
   FolderOpen,
+  Trash2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -21,7 +22,7 @@ import type { Visibility } from "@/types";
 export function FilesPage() {
   const { role, currentClient } = useAuth();
   const targetClientId = role === "client_owner" || role === "client_member" ? currentClient?.id : undefined;
-  const { files, uploadFile, isUploading, isLoading, canUpload } = useFiles(targetClientId);
+  const { files, uploadFile, deleteFile, isUploading, isLoading, canUpload } = useFiles(targetClientId);
   const { clients } = useClients();
 
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -47,6 +48,16 @@ export function FilesPage() {
       return `${(bytes / 1024).toFixed(0)} KB`;
     }
     return `${mb.toFixed(1)} MB`;
+  };
+
+  const handleDeleteFile = async (file: { id: string; name: string; file_key?: string | null }) => {
+    if (!window.confirm(`Are you sure you want to permanently delete "${file.name}"?`)) return;
+    try {
+      await deleteFile({ id: file.id, file_key: file.file_key });
+      toast.success(`Deleted "${file.name}".`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete file.");
+    }
   };
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
@@ -186,16 +197,27 @@ export function FilesPage() {
                 <span className="text-[10px] font-mono uppercase text-muted-foreground font-semibold">
                   {file.category}
                 </span>
-                <a
-                  href={file.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground transition-colors border border-border"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Download
-                </a>
+                <div className="flex items-center gap-2">
+                  {canUpload && (
+                    <button
+                      onClick={() => handleDeleteFile(file)}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors border border-border"
+                      title="Delete file"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <a
+                    href={file.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground transition-colors border border-border"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download
+                  </a>
+                </div>
               </div>
             </div>
           ))}

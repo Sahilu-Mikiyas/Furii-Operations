@@ -6,14 +6,25 @@ import { useClients } from "@/hooks/useClients";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate } from "@/lib/utils";
-import { Plus, Search, CheckCircle2, Clock, AlertTriangle, Loader2 } from "lucide-react";
+import {
+  Plus,
+  Search,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  Loader2,
+  Trash2,
+  Edit3,
+  X,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import type { TaskStatus, TaskPriority } from "@/types";
+import type { Task, TaskStatus, TaskPriority, Visibility } from "@/types";
 
 export function TasksPage() {
-  const { role, user, currentClient } = useAuth();
-  const { tasks, updateStatus, createTask, isLoading } = useTasks();
+  const { role } = useAuth();
+  const isManager = role === "manager" || role === "super_admin" || role === "admin";
+  const { tasks, updateStatus, createTask, updateTask, deleteTask, isLoading } = useTasks();
   const { projects } = useProjects();
   const { clients } = useClients();
 
@@ -28,7 +39,18 @@ export function TasksPage() {
   const [newPriority, setNewPriority] = useState<TaskPriority>("medium");
   const [newDueDate, setNewDueDate] = useState("");
   const [newProjectId, setNewProjectId] = useState("");
+  const [newVisibility, setNewVisibility] = useState<Visibility>("client");
   const [submitting, setSubmitting] = useState(false);
+
+  // Edit task modal state
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editPriority, setEditPriority] = useState<TaskPriority>("medium");
+  const [editStatus, setEditStatus] = useState<TaskStatus>("planned");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editVisibility, setEditVisibility] = useState<Visibility>("client");
+  const [isEditing, setIsEditing] = useState(false);
 
   const filteredTasks = tasks.filter((t) => {
     const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase());
@@ -44,7 +66,12 @@ export function TasksPage() {
 
     try {
       const selectedProj = projects.find((p) => p.id === newProjectId) || projects[0];
-      const targetClientId = selectedProj?.client_id || clients[0]?.id || "client-solomon";
+      const targetClientId = selectedProj?.client_id || clients[0]?.id;
+
+      if (!targetClientId) {
+        toast.error("Please onboard a client first.");
+        return;
+      }
 
       await createTask({
         title: newTitle,
@@ -54,11 +81,13 @@ export function TasksPage() {
         project_id: selectedProj?.id,
         client_id: targetClientId,
         status: "planned",
+        visibility: newVisibility,
       });
 
       toast.success("Task created successfully.");
       setNewTitle("");
       setNewDesc("");
+      setNewDueDate("");
       setShowCreateModal(false);
     } catch (err: any) {
       toast.error(err.message || "Failed to create task.");
@@ -67,7 +96,54 @@ export function TasksPage() {
     }
   };
 
-  const handleToggleTaskStatus = async (task: any) => {
+  const openEditModal = (task: Task) => {
+    setEditingTask(task);
+    setEditTitle(task.title);
+    setEditDesc(task.description || "");
+    setEditPriority(task.priority || "medium");
+    setEditStatus(task.status || "planned");
+    setEditDueDate(task.due_date || "");
+    setEditVisibility(task.visibility || "client");
+  };
+
+  const handleEditTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTask || !editTitle.trim()) return;
+    setIsEditing(true);
+
+    try {
+      await updateTask({
+        id: editingTask.id,
+        updates: {
+          title: editTitle,
+          description: editDesc,
+          priority: editPriority,
+          status: editStatus,
+          due_date: editDueDate || null,
+          visibility: editVisibility,
+        },
+      });
+
+      toast.success(`Task "${editTitle}" updated.`);
+      setEditingTask(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update task.");
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const handleDeleteTask = async (task: Task) => {
+    if (!window.confirm(`Are you sure you want to delete task "${task.title}"?`)) return;
+    try {
+      await deleteTask(task.id);
+      toast.success(`Task "${task.title}" deleted.`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete task.");
+    }
+  };
+
+  const handleToggleTaskStatus = async (task: Task) => {
     const nextStatus: TaskStatus = task.status === "completed" ? "in_progress" : "completed";
     try {
       await updateStatus({ id: task.id, status: nextStatus });
@@ -85,14 +161,10 @@ export function TasksPage() {
       className="space-y-6"
     >
       <PageHeader
-        title={role === "team_member" ? "My Assigned Tasks" : "Tasks Management"}
-        description={
-          role === "team_member"
-            ? "Your active production tasks across assigned projects and service streams."
-            : "Granular work items across all active client service streams and project deliverables."
-        }
+        title="Tasks & Granular Execution"
+        description="Granular work items across all active client service streams, design revisions, and project deliverables."
         actions={
-          role !== "client_member" && (
+          isManager && (
             <button
               onClick={() => setShowCreateModal(true)}
               className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
@@ -198,6 +270,11 @@ export function TasksPage() {
                       </h4>
                       <StatusBadge status={task.priority} />
                       <StatusBadge status={task.status} />
+                      {task.visibility === "internal" && (
+                        <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 font-semibold">
+                          Internal
+                        </span>
+                      )}
                     </div>
                     {task.description && (
                       <p className="text-xs text-muted-foreground line-clamp-1">{task.description}</p>
@@ -205,15 +282,34 @@ export function TasksPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs font-mono shrink-0">
+                <div className="flex items-center gap-3 shrink-0">
                   {task.due_date && (
                     <div
-                      className={`flex items-center gap-1.5 ${
+                      className={`flex items-center gap-1.5 text-xs font-mono ${
                         isOverdue ? "text-rose-600 font-bold" : "text-muted-foreground"
                       }`}
                     >
                       {isOverdue ? <AlertTriangle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
                       <span>{formatDate(task.due_date)}</span>
+                    </div>
+                  )}
+
+                  {isManager && (
+                    <div className="flex items-center gap-1 border-l border-border pl-2">
+                      <button
+                        onClick={() => openEditModal(task)}
+                        className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors cursor-pointer"
+                        title="Edit task"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTask(task)}
+                        className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                        title="Delete task"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -231,7 +327,12 @@ export function TasksPage() {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
           >
-            <h2 className="text-base font-bold text-foreground">Create Production Task</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Create Production Task</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <form onSubmit={handleCreateTask} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-foreground mb-1">Task Title</label>
@@ -246,7 +347,7 @@ export function TasksPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Project</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Assign to Project</label>
                 <select
                   value={newProjectId}
                   onChange={(e) => setNewProjectId(e.target.value)}
@@ -287,6 +388,18 @@ export function TasksPage() {
               </div>
 
               <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Client Visibility</label>
+                <select
+                  value={newVisibility}
+                  onChange={(e) => setNewVisibility(e.target.value as Visibility)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                >
+                  <option value="client">Client & Internal</option>
+                  <option value="internal">Internal Team Only</option>
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-foreground mb-1">Notes / Instructions</label>
                 <textarea
                   rows={3}
@@ -312,6 +425,119 @@ export function TasksPage() {
                 >
                   {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   Save Task
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit Task Modal */}
+      {editingTask && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Edit Task</h2>
+              <button onClick={() => setEditingTask(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleEditTaskSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Task Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as TaskStatus)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="planned">Planned</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="in_review">In Review</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Priority</label>
+                  <select
+                    value={editPriority}
+                    onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={editDueDate}
+                    onChange={(e) => setEditDueDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Visibility</label>
+                  <select
+                    value={editVisibility}
+                    onChange={(e) => setEditVisibility(e.target.value as Visibility)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="client">Client & Internal</option>
+                    <option value="internal">Internal Only</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Description / Notes</label>
+                <textarea
+                  rows={3}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTask(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isEditing}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {isEditing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Save Changes
                 </button>
               </div>
             </form>

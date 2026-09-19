@@ -17,12 +17,28 @@ import {
   ExternalLink,
   Loader2,
   CheckCircle2,
+  Edit3,
+  Trash2,
+  KeyRound,
+  Archive,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
+
 export function ClientsPage() {
   const { role, setCurrentClient } = useAuth();
-  const { clients, createClient, updateHealth, isCreating } = useClients();
+  const {
+    clients,
+    createClient,
+    updateClient,
+    deleteClient,
+    archiveClient,
+    updateHealth,
+    provisionAccount,
+    isCreating,
+    isUpdating,
+    isProvisioning,
+  } = useClients();
   const { projects } = useProjects();
 
   const [search, setSearch] = useState("");
@@ -35,6 +51,21 @@ export function ClientsPage() {
   const [newWebsite, setNewWebsite] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Edit Client Modal State
+  const [editClientModal, setEditClientModal] = useState<any | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editIndustry, setEditIndustry] = useState("");
+  const [editWebsite, setEditWebsite] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editStatus, setEditStatus] = useState<any>("active");
+
+  // Provision Client Login Modal State
+  const [provisionModal, setProvisionModal] = useState<any | null>(null);
+  const [provEmail, setProvEmail] = useState("");
+  const [provPassword, setProvPassword] = useState("");
+  const [provName, setProvName] = useState("");
+
 
   // Restrict client roles from seeing all agency clients
   if (role === "client_owner" || role === "client_member") {
@@ -77,11 +108,63 @@ export function ClientsPage() {
     }
   };
 
+  const handleEditClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editClientModal || !editName.trim()) return;
+    try {
+      await updateClient({
+        id: editClientModal.id,
+        updates: {
+          name: editName,
+          industry: editIndustry,
+          website: editWebsite || null,
+          description: editDesc,
+          status: editStatus,
+        },
+      });
+      toast.success(`Client "${editName}" updated successfully.`);
+      setEditClientModal(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update client.");
+    }
+  };
+
+  const handleDeleteClient = async (client: any) => {
+    if (!confirm(`Are you sure you want to delete "${client.name}"? This moves the client to archived history.`)) return;
+    try {
+      await deleteClient(client.id);
+      toast.success(`Client "${client.name}" removed.`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete client.");
+    }
+  };
+
+  const handleProvisionAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!provisionModal || !provEmail.trim() || !provPassword.trim()) return;
+    try {
+      await provisionAccount({
+        email: provEmail.trim(),
+        password: provPassword.trim(),
+        fullName: provName.trim() || provisionModal.name,
+        clientId: provisionModal.id,
+      });
+      toast.success(`Client portal account created for ${provEmail}!`);
+      setProvisionModal(null);
+      setProvEmail("");
+      setProvPassword("");
+      setProvName("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to provision client account.");
+    }
+  };
+
   const handleHealthChange = async (clientId: string, health_status: ClientHealthStatus) => {
     try {
       await updateHealth({ id: clientId, health_status });
       toast.success("Client health status updated.");
     } catch (err: any) {
+
       toast.error(err.message || "Failed to update status.");
     }
   };
@@ -183,11 +266,48 @@ export function ClientsPage() {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-border/80 flex items-center justify-between text-xs">
-                <span className="font-mono text-muted-foreground font-medium">
-                  {clientProjects.length} Active Project(s)
-                </span>
-                <div className="flex items-center gap-2">
+              {/* Card Action Controls */}
+              <div className="pt-3 border-t border-border/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      setEditClientModal(client);
+                      setEditName(client.name);
+                      setEditIndustry(client.industry || "");
+                      setEditWebsite(client.website || "");
+                      setEditDesc(client.description || "");
+                      setEditStatus(client.status || "active");
+                    }}
+                    title="Edit Client Details"
+                    className="p-1.5 rounded-lg border border-border bg-secondary/40 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setProvisionModal(client);
+                      setProvName(client.name);
+                      setProvEmail("");
+                      setProvPassword("");
+                    }}
+                    title="Provision Client Portal Login"
+                    className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold text-[11px] transition-colors cursor-pointer"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    <span>Login</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteClient(client)}
+                    title="Delete / Archive Client"
+                    className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5 justify-end">
                   <button
                     onClick={() => handleOpenClientWorkspace(client)}
                     className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-secondary hover:bg-secondary/80 text-foreground transition-colors cursor-pointer"
@@ -206,6 +326,7 @@ export function ClientsPage() {
           );
         })}
       </div>
+
 
       {/* New Client Modal */}
       {showModal && (
@@ -283,6 +404,182 @@ export function ClientsPage() {
           </motion.div>
         </div>
       )}
+
+      {/* Edit Client Modal */}
+      {editClientModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Edit Client Profile</h2>
+              <StatusBadge status={editStatus} />
+            </div>
+
+            <form onSubmit={handleEditClient} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Company Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Industry</label>
+                  <input
+                    type="text"
+                    value={editIndustry}
+                    onChange={(e) => setEditIndustry(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden cursor-pointer"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Website URL</label>
+                <input
+                  type="url"
+                  value={editWebsite}
+                  onChange={(e) => setEditWebsite(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Operational Scope & Notes</label>
+                <textarea
+                  rows={3}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditClientModal(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {isUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Provision Client Login Modal */}
+      {provisionModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <h2 className="text-base font-bold text-foreground">Provision Client Account</h2>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Instantly create login credentials for <span className="font-semibold text-foreground">{provisionModal.name}</span>.
+              </p>
+            </div>
+
+            <form onSubmit={handleProvisionAccount} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Contact Name</label>
+                <input
+                  type="text"
+                  required
+                  value={provName}
+                  onChange={(e) => setProvName(e.target.value)}
+                  placeholder="e.g. Solomon Haile"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Login Email</label>
+                <input
+                  type="email"
+                  required
+                  value={provEmail}
+                  onChange={(e) => setProvEmail(e.target.value)}
+                  placeholder="executive@clientcompany.com"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Initial Password</label>
+                <input
+                  type="text"
+                  required
+                  minLength={8}
+                  value={provPassword}
+                  onChange={(e) => setProvPassword(e.target.value)}
+                  placeholder="At least 8 characters..."
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground font-mono focus:outline-hidden"
+                />
+                <span className="text-[10px] text-muted-foreground block mt-1">
+                  The client will log in at <span className="font-mono text-foreground">/portal/login</span>.
+                </span>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProvisionModal(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isProvisioning}
+                  className="px-4 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                >
+                  {isProvisioning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Create & Activate Account
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
+
   );
 }

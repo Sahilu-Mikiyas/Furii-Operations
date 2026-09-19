@@ -101,11 +101,37 @@ export function useFiles(clientId?: string, serviceId?: string) {
     },
   });
 
+  // Delete file (internal manager only)
+  const deleteFileMutation = useMutation({
+    mutationFn: async (file: { id: string; file_key?: string | null }) => {
+      if (isClientRole) {
+        throw new Error("Clients are not permitted to delete files.");
+      }
+
+      if (file.file_key) {
+        try {
+          await supabase.storage.from("files").remove([file.file_key]);
+        } catch (storageErr) {
+          console.warn("Storage deletion error (ignored):", storageErr);
+        }
+      }
+
+      const { error } = await supabase.from("files").delete().eq("id", file.id);
+      if (error) throw error;
+      return file.id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    },
+  });
+
   return {
     ...query,
     files: query.data || [],
     uploadFile: uploadFileMutation.mutateAsync,
     isUploading: uploadFileMutation.isPending,
+    deleteFile: deleteFileMutation.mutateAsync,
+    isDeleting: deleteFileMutation.isPending,
     canUpload: !isClientRole,
   };
 }

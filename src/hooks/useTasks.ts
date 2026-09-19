@@ -11,7 +11,7 @@ export function useTasks(serviceId?: string, projectId?: string) {
   const query = useQuery({
     queryKey: ["tasks", serviceId || "all", projectId || "all", role, user?.id],
     queryFn: async (): Promise<Task[]> => {
-      let req = supabase.from("tasks").select("*").order("created_at", { ascending: false });
+      let req = supabase.from("tasks").select("*").is("deleted_at", null).order("created_at", { ascending: false });
 
       if (serviceId) req = req.eq("service_id", serviceId);
       if (projectId) req = req.eq("project_id", projectId);
@@ -93,11 +93,44 @@ export function useTasks(serviceId?: string, projectId?: string) {
     },
   });
 
+  const updateTaskMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Task> }) => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("tasks")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+
   return {
     ...query,
     tasks: query.data || [],
     updateStatus: updateStatusMutation.mutateAsync,
     createTask: createTaskMutation.mutateAsync,
-    isUpdating: updateStatusMutation.isPending,
+    updateTask: updateTaskMutation.mutateAsync,
+    deleteTask: deleteTaskMutation.mutateAsync,
+    isUpdating: updateStatusMutation.isPending || updateTaskMutation.isPending,
   };
 }
+

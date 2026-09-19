@@ -109,11 +109,90 @@ export function useInvoices(clientId?: string) {
     },
   });
 
+  const createInvoiceMutation = useMutation({
+    mutationFn: async ({
+      clientId,
+      projectId,
+      invoiceNumber,
+      title,
+      total,
+      currency = "ETB",
+      dueDate,
+      items,
+      notes,
+    }: {
+      clientId: string;
+      projectId?: string;
+      invoiceNumber: string;
+      title: string;
+      total: number;
+      currency?: string;
+      dueDate?: string;
+      items?: Array<{ description: string; quantity: number; unit_price: number }>;
+      notes?: string;
+    }) => {
+      const { data: inv, error: invErr } = await supabase
+        .from("invoices")
+        .insert({
+          organization_id: "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
+          client_id: clientId,
+          project_id: projectId || null,
+          invoice_number: invoiceNumber,
+          title,
+          total,
+          amount: total,
+          amount_paid: 0,
+          currency,
+          due_date: dueDate || null,
+          notes: notes || null,
+          status: "sent",
+        })
+        .select()
+        .single();
+
+      if (invErr) throw invErr;
+
+      // Insert line items if present
+      if (items && items.length > 0) {
+        const itemPayload = items.map((itm, idx) => ({
+          invoice_id: inv.id,
+          organization_id: "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
+          description: itm.description,
+          quantity: itm.quantity,
+          unit_price: itm.unit_price,
+          total: itm.quantity * itm.unit_price,
+          order_index: idx,
+        }));
+        await supabase.from("invoice_items").insert(itemPayload);
+      }
+
+      return inv;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("invoices").delete().eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+
   return {
     ...query,
     invoices: query.data?.invoices || [],
     payments: query.data?.payments || [],
     recordPayment: recordPaymentMutation.mutateAsync,
+    createInvoice: createInvoiceMutation.mutateAsync,
+    deleteInvoice: deleteInvoiceMutation.mutateAsync,
     isRecordingPayment: recordPaymentMutation.isPending,
+    isCreatingInvoice: createInvoiceMutation.isPending,
   };
 }
+

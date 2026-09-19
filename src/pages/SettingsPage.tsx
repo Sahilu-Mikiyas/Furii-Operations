@@ -1,31 +1,34 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { useAuth } from "@/lib/auth";
+import { useClients } from "@/hooks/useClients";
 import { supabase } from "@/integrations/supabase/client";
-import { Building2, Users, Plus, Loader2 } from "lucide-react";
+import { Building2, KeyRound, Plus, Loader2, UserCheck, ShieldCheck, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import type { UserRole } from "@/types";
 
 export function SettingsPage() {
   const { currency, setCurrency, role, user } = useAuth();
-  const [orgName, setOrgName] = useState("Furii");
+  const isManager = role === "manager" || role === "super_admin" || role === "admin";
+  const { clients, provisionAccount } = useClients();
+
+  const [orgName, setOrgName] = useState("Furii Operations");
   const [website, setWebsite] = useState("https://furii.agency");
 
-  const [teamMembers, setTeamMembers] = useState<any[]>([]);
-  const [loadingTeam, setLoadingTeam] = useState(true);
+  const [clientAccounts, setClientAccounts] = useState<any[]>([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
 
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteName, setInviteName] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<UserRole>("team_member");
-  const [inviteTitle, setInviteTitle] = useState("");
-  const [submittingInvite, setSubmittingInvite] = useState(false);
+  // Provision Client Login Modal
+  const [showProvisionModal, setShowProvisionModal] = useState(false);
+  const [provClientId, setProvClientId] = useState("");
+  const [provName, setProvName] = useState("");
+  const [provEmail, setProvEmail] = useState("");
+  const [provPassword, setProvPassword] = useState("");
+  const [submittingProvision, setSubmittingProvision] = useState(false);
 
-  const isSuperAdmin = role === "super_admin";
-
-  const fetchTeam = async () => {
+  const fetchClientAccounts = async () => {
     try {
+      setLoadingAccounts(true);
       const { data, error } = await supabase
         .from("profiles")
         .select(`
@@ -33,69 +36,61 @@ export function SettingsPage() {
           full_name,
           email,
           title,
-          memberships:memberships(role)
+          client_id,
+          clients:clients(id, name),
+          memberships:memberships(role, is_active)
         `);
 
-      if (!error && data && data.length > 0) {
-        setTeamMembers(
-          data.map((p: any) => ({
-            id: p.id,
-            full_name: p.full_name,
-            email: p.email,
-            title: p.title || "Specialist",
-            role: p.memberships?.[0]?.role || "team_member",
-          }))
-        );
+      if (!error && data) {
+        setClientAccounts(data);
       }
     } catch (err) {
-      console.warn("Team fetch notice:", err);
+      console.warn("Client accounts fetch notice:", err);
     } finally {
-      setLoadingTeam(false);
+      setLoadingAccounts(false);
     }
   };
 
   useEffect(() => {
-    fetchTeam();
+    fetchClientAccounts();
   }, []);
 
   const handleSaveAgency = (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Agency identity updated successfully.");
+    toast.success("Agency identity settings saved.");
   };
 
-  const handleInviteMember = async (e: React.FormEvent) => {
+  const handleProvisionClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteName.trim() || !inviteEmail.trim()) return;
-    setSubmittingInvite(true);
+    const targetClient = provClientId || clients[0]?.id;
+    if (!targetClient) {
+      toast.error("Please onboard a client company first.");
+      return;
+    }
+    if (!provEmail.trim() || !provPassword.trim() || !provName.trim()) {
+      toast.error("All fields are required.");
+      return;
+    }
 
+    setSubmittingProvision(true);
     try {
-      // Create record in profiles table
-      const newUserId = `user-${Date.now()}`;
-      await supabase.from("profiles").insert({
-        id: newUserId,
-        organization_id: "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
-        email: inviteEmail,
-        full_name: inviteName,
-        title: inviteTitle || "Contributor",
+      await provisionAccount({
+        clientId: targetClient,
+        email: provEmail.trim(),
+        password: provPassword,
+        fullName: provName.trim(),
       });
 
-      await supabase.from("memberships").insert({
-        organization_id: "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
-        user_id: newUserId,
-        role: inviteRole,
-        is_active: true,
-      });
-
-      toast.success(`Invitation created for ${inviteEmail}.`);
-      setInviteName("");
-      setInviteEmail("");
-      setInviteTitle("");
-      setShowInviteModal(false);
-      fetchTeam();
+      toast.success(`Client credentials created for ${provEmail}. Client can log in immediately.`);
+      setShowProvisionModal(false);
+      setProvEmail("");
+      setProvPassword("");
+      setProvName("");
+      fetchClientAccounts();
     } catch (err: any) {
-      toast.error(err.message || "Failed to create invitation.");
+      toast.error(err.message || "Failed to provision client login.");
     } finally {
-      setSubmittingInvite(false);
+      setSubmittingProvision(false);
     }
   };
 
@@ -107,8 +102,8 @@ export function SettingsPage() {
       className="space-y-6 max-w-4xl"
     >
       <PageHeader
-        title="Platform & Agency Settings"
-        description="Configure agency identity, manage internal team roster, and set operational defaults."
+        title="Settings & Client Access"
+        description="Configure agency operating identity, provision secure client logins, and manage workspace defaults."
       />
 
       {/* Organization Details */}
@@ -116,13 +111,11 @@ export function SettingsPage() {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-foreground uppercase tracking-wider font-mono flex items-center gap-2">
             <Building2 className="h-4 w-4" />
-            Agency Identity
+            Agency Identity & Currency
           </h3>
-          {!isSuperAdmin && (
-            <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-0.5 rounded border border-border">
-              Read-Only (Super Admin Required)
-            </span>
-          )}
+          <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+            Manager Mode Active
+          </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -130,10 +123,9 @@ export function SettingsPage() {
             <label className="text-xs font-semibold text-foreground block mb-1">Company Name</label>
             <input
               type="text"
-              disabled={!isSuperAdmin}
               value={orgName}
               onChange={(e) => setOrgName(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden disabled:opacity-60"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
             />
           </div>
 
@@ -141,10 +133,9 @@ export function SettingsPage() {
             <label className="text-xs font-semibold text-foreground block mb-1">Website URL</label>
             <input
               type="text"
-              disabled={!isSuperAdmin}
               value={website}
               onChange={(e) => setWebsite(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden disabled:opacity-60"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
             />
           </div>
         </div>
@@ -157,8 +148,8 @@ export function SettingsPage() {
               onClick={() => setCurrency("ETB")}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${
                 currency === "ETB"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-secondary text-muted-foreground border-border"
+                  ? "bg-primary text-primary-foreground border-primary shadow-2xs"
+                  : "bg-secondary text-muted-foreground border-border hover:text-foreground"
               }`}
             >
               ETB — Ethiopian Birr
@@ -168,8 +159,8 @@ export function SettingsPage() {
               onClick={() => setCurrency("USD")}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${
                 currency === "USD"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-secondary text-muted-foreground border-border"
+                  ? "bg-primary text-primary-foreground border-primary shadow-2xs"
+                  : "bg-secondary text-muted-foreground border-border hover:text-foreground"
               }`}
             >
               USD — United States Dollar
@@ -177,147 +168,173 @@ export function SettingsPage() {
           </div>
         </div>
 
-        {isSuperAdmin && (
-          <div className="pt-2 flex justify-end">
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
-            >
-              Save Agency Profile
-            </button>
-          </div>
-        )}
+        <div className="pt-2 flex justify-end">
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
+          >
+            Save Settings
+          </button>
+        </div>
       </form>
 
-      {/* Team Roster & Roles */}
+      {/* Client Accounts & Access Provisioning */}
       <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <h3 className="text-sm font-bold text-foreground uppercase tracking-wider font-mono flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Team Roster & Roles
+              <KeyRound className="h-4 w-4" />
+              Client Access & Provisioning
             </h3>
-            <p className="text-xs text-muted-foreground">Internal agency staff and operational roles.</p>
+            <p className="text-xs text-muted-foreground">
+              Provision direct email & password accounts for clients to access their workspace.
+            </p>
           </div>
 
-          {isSuperAdmin && (
+          {isManager && (
             <button
-              onClick={() => setShowInviteModal(true)}
+              onClick={() => setShowProvisionModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              Invite Member
+              Provision Client Login
             </button>
           )}
         </div>
 
-        {loadingTeam ? (
+        {loadingAccounts ? (
           <div className="py-6 flex justify-center text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin" />
           </div>
+        ) : clientAccounts.length === 0 ? (
+          <div className="p-8 text-center bg-secondary/20 rounded-xl border border-dashed border-border text-xs text-muted-foreground">
+            No client logins provisioned yet.
+          </div>
         ) : (
           <div className="divide-y divide-border/60">
-            {teamMembers.map((member) => (
-              <div key={member.id} className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center">
-                    {member.full_name ? member.full_name.slice(0, 2).toUpperCase() : "TM"}
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-foreground">{member.full_name}</p>
-                    <p className="text-[11px] text-muted-foreground">{member.email}</p>
-                  </div>
-                </div>
+            {clientAccounts.map((acc) => {
+              const clientName = (acc as any).clients?.name || "Global Agency Member";
+              const membershipRole = (acc as any).memberships?.[0]?.role || "user";
+              const isClient = membershipRole.includes("client") || acc.client_id;
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-secondary border border-border text-foreground">
-                    {member.title}
-                  </span>
-                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
-                    {String(member.role).replace("_", " ")}
-                  </span>
+              return (
+                <div key={acc.id} className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center border border-primary/20">
+                      {acc.full_name ? acc.full_name.slice(0, 2).toUpperCase() : "CL"}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-foreground">{acc.full_name}</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">{acc.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-secondary border border-border text-foreground">
+                      {clientName}
+                    </span>
+                    <span
+                      className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold ${
+                        isClient
+                          ? "bg-blue-50 text-blue-700 border border-blue-200"
+                          : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      }`}
+                    >
+                      {String(membershipRole).replace("_", " ")}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Invite Modal */}
-      {showInviteModal && (
+      {/* Provision Modal */}
+      {showProvisionModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
           >
-            <h2 className="text-base font-bold text-foreground">Invite Team Member</h2>
-            <form onSubmit={handleInviteMember} className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Provision Client Account</h2>
+              <button onClick={() => setShowProvisionModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Immediately creates an active Supabase user with instant password access for your client.
+            </p>
+
+            <form onSubmit={handleProvisionClient} className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Full Name</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Target Client Company</label>
+                <select
+                  value={provClientId}
+                  onChange={(e) => setProvClientId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                >
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Contact Full Name</label>
                 <input
                   type="text"
                   required
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                  placeholder="e.g. Alazar Mengistu"
+                  value={provName}
+                  onChange={(e) => setProvName(e.target.value)}
+                  placeholder="e.g. Solomon Mengistu"
                   className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Work Email</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Login Email</label>
                 <input
                   type="email"
                   required
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="name@furii.agency"
+                  value={provEmail}
+                  onChange={(e) => setProvEmail(e.target.value)}
+                  placeholder="client@company.com"
                   className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Platform Role</label>
-                  <select
-                    value={inviteRole}
-                    onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
-                  >
-                    <option value="team_member">Team Member</option>
-                    <option value="admin">Project Manager</option>
-                    <option value="super_admin">Super Admin</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Job Title</label>
-                  <input
-                    type="text"
-                    value={inviteTitle}
-                    onChange={(e) => setInviteTitle(e.target.value)}
-                    placeholder="e.g. UI/UX Designer"
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Initial Password</label>
+                <input
+                  type="text"
+                  required
+                  value={provPassword}
+                  onChange={(e) => setProvPassword(e.target.value)}
+                  placeholder="Strong password for the client"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground font-mono focus:outline-hidden"
+                />
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowInviteModal(false)}
+                  onClick={() => setShowProvisionModal(false)}
                   className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={submittingInvite}
+                  disabled={submittingProvision}
                   className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                 >
-                  {submittingInvite && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Create Team Member
+                  {submittingProvision && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Provision Account
                 </button>
               </div>
             </form>

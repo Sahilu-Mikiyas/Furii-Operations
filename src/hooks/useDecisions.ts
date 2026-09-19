@@ -46,10 +46,23 @@ export function useDecisions(serviceId?: string, projectId?: string) {
     },
   });
 
+  const deleteDecisionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("decisions").delete().eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["decisions"] });
+    },
+  });
+
   return {
     ...query,
     decisions: query.data || [],
     createDecision: createDecisionMutation.mutateAsync,
+    deleteDecision: deleteDecisionMutation.mutateAsync,
     isCreating: createDecisionMutation.isPending,
   };
 }
+

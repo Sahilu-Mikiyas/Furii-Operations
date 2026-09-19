@@ -3,7 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { formatDate } from "@/lib/utils";
-import { Clock, MapPin, Plus, Loader2, Calendar as CalendarIcon } from "lucide-react";
+import { Clock, MapPin, Plus, Loader2, Calendar as CalendarIcon, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import type { EventType, Visibility } from "@/types";
@@ -11,7 +11,7 @@ import type { EventType, Visibility } from "@/types";
 export function CalendarPage() {
   const { role, currentClient } = useAuth();
   const targetClientId = role === "client_owner" || role === "client_member" ? currentClient?.id : undefined;
-  const { events, createEvent, isCreating, isLoading, canCreate } = useCalendarEvents(targetClientId);
+  const { events, createEvent, deleteEvent, isCreating, isLoading, canCreate } = useCalendarEvents(targetClientId);
 
   const [viewFilter, setViewFilter] = useState<"all" | "client" | "internal">("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -54,6 +54,16 @@ export function CalendarPage() {
       setShowCreateModal(false);
     } catch (err: any) {
       toast.error(err.message || "Failed to schedule event.");
+    }
+  };
+
+  const handleDeleteEvent = async (id: string, eventTitle: string) => {
+    if (!window.confirm(`Are you sure you want to delete "${eventTitle}"?`)) return;
+    try {
+      await deleteEvent(id);
+      toast.success(`Event "${eventTitle}" deleted.`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete event.");
     }
   };
 
@@ -142,16 +152,28 @@ export function CalendarPage() {
                 </div>
               </div>
 
-              <div className="space-y-1 text-right shrink-0 font-mono text-xs text-muted-foreground">
-                <div className="flex items-center gap-1.5 justify-end">
-                  <Clock className="h-3 w-3" />
-                  <span>{formatDate(evt.start_time, "h:mm a")}</span>
-                </div>
-                {evt.location && (
-                  <div className="flex items-center gap-1.5 justify-end text-[11px]">
-                    <MapPin className="h-3 w-3" />
-                    <span>{evt.location}</span>
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="space-y-1 text-right font-mono text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <Clock className="h-3 w-3" />
+                    <span>{formatDate(evt.start_time, "h:mm a")}</span>
                   </div>
+                  {evt.location && (
+                    <div className="flex items-center gap-1.5 justify-end text-[11px]">
+                      <MapPin className="h-3 w-3" />
+                      <span>{evt.location}</span>
+                    </div>
+                  )}
+                </div>
+
+                {canCreate && (
+                  <button
+                    onClick={() => handleDeleteEvent(evt.id, evt.title)}
+                    className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                    title="Delete event"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
             </div>

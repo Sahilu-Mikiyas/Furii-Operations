@@ -59,10 +59,25 @@ export function useWorkRecords(serviceId?: string, projectId?: string) {
     },
   });
 
+  const deleteRecordMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("work_records").delete().eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["work_records"] });
+    },
+  });
+
   return {
     ...query,
     workRecords: query.data || [],
+    records: query.data || [],
     createWorkRecord: createRecordMutation.mutateAsync,
+    createRecord: createRecordMutation.mutateAsync,
+    deleteWorkRecord: deleteRecordMutation.mutateAsync,
+    deleteRecord: deleteRecordMutation.mutateAsync,
     isCreating: createRecordMutation.isPending,
     canCreate: !isClientRole,
   };
