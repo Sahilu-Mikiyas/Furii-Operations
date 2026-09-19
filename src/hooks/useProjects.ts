@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Project } from "@/types";
-import { MOCK_PROJECTS } from "@/data/mock-data";
 
 export function useProjects(clientId?: string) {
   const queryClient = useQueryClient();
@@ -9,24 +8,19 @@ export function useProjects(clientId?: string) {
   const query = useQuery({
     queryKey: ["projects", clientId || "all"],
     queryFn: async (): Promise<Project[]> => {
-      let req = supabase.from("projects").select("*").order("created_at", { ascending: false });
-      if (clientId) {
-        req = req.eq("client_id", clientId);
-      }
-
+      let req = supabase
+        .from("projects")
+        .select(`*, services(id, name, service_type, status, progress)`)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (clientId) req = req.eq("client_id", clientId);
       const { data, error } = await req;
-      if (error) {
-        console.warn("Failed to fetch projects from Supabase, using fallback:", error.message);
-        return clientId ? MOCK_PROJECTS.filter((p) => p.client_id === clientId) : MOCK_PROJECTS;
-      }
-
-      if (!data || data.length === 0) {
-        return clientId ? MOCK_PROJECTS.filter((p) => p.client_id === clientId) : MOCK_PROJECTS;
-      }
-
-      return data as Project[];
+      if (error) throw new Error(error.message);
+      return (data || []) as Project[];
     },
   });
+
+
 
   const createProjectMutation = useMutation({
     mutationFn: async (newProject: Partial<Project>) => {

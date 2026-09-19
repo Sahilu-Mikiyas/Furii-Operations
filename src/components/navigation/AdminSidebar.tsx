@@ -87,9 +87,10 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             Agency Management
           </div>
           {ADMIN_NAV.map((item) => {
-            if (item.href === "/admin/settings" && role !== "super_admin") {
-              return null; // Only super_admin sees settings
+            if (item.href === "/admin/settings" && role !== "super_admin" && role !== "manager" && role !== "admin") {
+              return null;
             }
+
 
             const Icon = item.icon;
             const isActive = currentPath === item.href || (item.href !== "/admin/dashboard" && currentPath.startsWith(item.href));

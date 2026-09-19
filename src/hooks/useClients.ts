@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Client, ClientHealthStatus } from "@/types";
-import { MOCK_CLIENTS } from "@/data/mock-data";
 
 export function useClients() {
   const queryClient = useQueryClient();
@@ -11,19 +10,12 @@ export function useClients() {
     queryFn: async (): Promise<Client[]> => {
       const { data, error } = await supabase
         .from("clients")
-        .select("*")
+        .select(`*, contacts:client_contacts(*)`)
+        .is("deleted_at", null)
         .order("name", { ascending: true });
 
-      if (error) {
-        console.warn("Failed to fetch clients from Supabase, using fallback:", error.message);
-        return MOCK_CLIENTS;
-      }
-
-      if (!data || data.length === 0) {
-        return MOCK_CLIENTS;
-      }
-
-      return data as Client[];
+      if (error) throw new Error(error.message);
+      return (data || []) as Client[];
     },
   });
 

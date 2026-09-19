@@ -24,7 +24,8 @@ export function ClientApprovalsPage() {
   const [feedbackModalId, setFeedbackModalId] = useState<string | null>(null);
   const [feedbackComment, setFeedbackComment] = useState("");
 
-  const isClientOwner = role === "client_owner";
+  const isClientOwner = role === "client" || role === "client_owner";
+
 
   const handleApprove = async (approvalId: string) => {
     try {

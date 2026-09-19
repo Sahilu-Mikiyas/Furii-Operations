@@ -1,18 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Event } from "@/types";
-import { MOCK_EVENTS } from "@/data/mock-data";
 import { useAuth } from "@/lib/auth";
 
 export function useCalendarEvents(clientId?: string) {
   const queryClient = useQueryClient();
   const { user, role } = useAuth();
-  const isClientRole = role === "client_owner" || role === "client_member";
+  const isClientRole = role === "client" || role === "client_owner" || role === "client_member";
 
   const query = useQuery({
     queryKey: ["calendar_events", clientId || "all", role, user?.id],
     queryFn: async (): Promise<Event[]> => {
-      let req = supabase.from("calendar_events").select("*").order("start_datetime", { ascending: true });
+      let req = supabase.from("calendar_events").select("*").order("start_time", { ascending: true });
 
       if (clientId) {
         req = req.eq("client_id", clientId);
@@ -25,18 +24,15 @@ export function useCalendarEvents(clientId?: string) {
       }
 
       const { data, error } = await req;
-      if (error || !data || data.length === 0) {
-        let list = MOCK_EVENTS;
-        if (clientId) list = list.filter((e) => e.client_id === clientId);
-        if (isClientRole) list = list.filter((e) => e.visibility === "client");
-        return list;
+      if (error) {
+        console.error("Calendar events query error:", error.message);
+        return [];
       }
 
-      // Map start_datetime / end_datetime to Event interface
-      return data.map((d: any) => ({
+      return (data || []).map((d: any) => ({
         ...d,
-        start_time: d.start_datetime || d.start_time,
-        end_time: d.end_datetime || d.end_time,
+        start_time: d.start_time || d.start_datetime,
+        end_time: d.end_time || d.end_datetime,
       })) as Event[];
     },
   });

@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Service, ServiceStatus } from "@/types";
-import { MOCK_SERVICES } from "@/data/mock-data";
 
 export function useServices(projectId?: string, clientId?: string) {
   const queryClient = useQueryClient();
@@ -15,21 +14,11 @@ export function useServices(projectId?: string, clientId?: string) {
 
       const { data, error } = await req;
       if (error) {
-        console.warn("Failed to fetch services, using fallback:", error.message);
-        let list = MOCK_SERVICES;
-        if (projectId) list = list.filter((s) => s.project_id === projectId);
-        if (clientId) list = list.filter((s) => s.client_id === clientId);
-        return list;
+        console.error("Failed to fetch services:", error.message);
+        return [];
       }
 
-      if (!data || data.length === 0) {
-        let list = MOCK_SERVICES;
-        if (projectId) list = list.filter((s) => s.project_id === projectId);
-        if (clientId) list = list.filter((s) => s.client_id === clientId);
-        return list;
-      }
-
-      return data as Service[];
+      return (data || []) as Service[];
     },
   });
 

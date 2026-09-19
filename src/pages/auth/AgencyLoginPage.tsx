@@ -32,7 +32,7 @@ export function AgencyLoginPage() {
 
       const userRole = member?.role;
 
-      if (userRole === "client_owner" || userRole === "client_member") {
+      if (userRole === "client" || userRole === "client_owner" || userRole === "client_member") {
         await supabase.auth.signOut();
         toast.error("Client account detected. Please use the Client Portal Login.");
         navigate("/portal/login");
@@ -40,11 +40,8 @@ export function AgencyLoginPage() {
       }
 
       toast.success("Welcome to Operations Command.");
-      if (userRole === "team_member") {
-        navigate("/team/dashboard");
-      } else {
-        navigate("/admin/dashboard");
-      }
+      navigate("/admin/dashboard");
+
     } catch (err: any) {
       toast.error(err.message || "Failed to authenticate.");
     } finally {

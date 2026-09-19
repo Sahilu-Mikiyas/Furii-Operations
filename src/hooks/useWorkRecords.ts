@@ -1,13 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { WorkRecord, Visibility } from "@/types";
-import { MOCK_WORK_RECORDS } from "@/data/mock-data";
 import { useAuth } from "@/lib/auth";
 
 export function useWorkRecords(serviceId?: string, projectId?: string) {
   const queryClient = useQueryClient();
   const { user, role } = useAuth();
-  const isClientRole = role === "client_owner" || role === "client_member";
+  const isClientRole = role === "client" || role === "client_owner" || role === "client_member";
 
   const query = useQuery({
     queryKey: ["work_records", serviceId || "all", projectId || "all", role, user?.id],
@@ -25,14 +24,12 @@ export function useWorkRecords(serviceId?: string, projectId?: string) {
       }
 
       const { data, error } = await req;
-      if (error || !data || data.length === 0) {
-        let list = MOCK_WORK_RECORDS;
-        if (serviceId) list = list.filter((r) => r.service_id === serviceId);
-        if (isClientRole) list = list.filter((r) => r.visibility === "client");
-        return list;
+      if (error) {
+        console.error("Work records query error:", error.message);
+        return [];
       }
 
-      return data as WorkRecord[];
+      return (data || []) as WorkRecord[];
     },
   });
 

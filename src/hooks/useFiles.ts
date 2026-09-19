@@ -1,14 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { FileRecord, Visibility } from "@/types";
-import { MOCK_FILES } from "@/data/mock-data";
 import { useAuth } from "@/lib/auth";
 
 export function useFiles(clientId?: string, serviceId?: string) {
   const queryClient = useQueryClient();
   const { user, role } = useAuth();
 
-  const isClientRole = role === "client_owner" || role === "client_member";
+  const isClientRole = role === "client" || role === "client_owner" || role === "client_member";
 
   const query = useQuery({
     queryKey: ["files", clientId || "all", serviceId || "all", role, user?.id],
@@ -27,15 +26,12 @@ export function useFiles(clientId?: string, serviceId?: string) {
       }
 
       const { data, error } = await req;
-      if (error || !data || data.length === 0) {
-        let list = MOCK_FILES;
-        if (clientId) list = list.filter((f) => f.client_id === clientId);
-        if (serviceId) list = list.filter((f) => f.service_id === serviceId);
-        if (isClientRole) list = list.filter((f) => f.visibility === "client");
-        return list;
+      if (error) {
+        console.error("Files query error:", error.message);
+        return [];
       }
 
-      return data as FileRecord[];
+      return (data || []) as FileRecord[];
     },
   });
 

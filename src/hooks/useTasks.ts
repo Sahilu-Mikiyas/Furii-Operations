@@ -1,12 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Task, TaskStatus, TaskPriority } from "@/types";
-import { MOCK_TASKS } from "@/data/mock-data";
 import { useAuth } from "@/lib/auth";
 
 export function useTasks(serviceId?: string, projectId?: string) {
   const queryClient = useQueryClient();
   const { user, role } = useAuth();
+  const isClientRole = role === "client" || role === "client_owner" || role === "client_member";
 
   const query = useQuery({
     queryKey: ["tasks", serviceId || "all", projectId || "all", role, user?.id],
@@ -16,10 +16,8 @@ export function useTasks(serviceId?: string, projectId?: string) {
       if (serviceId) req = req.eq("service_id", serviceId);
       if (projectId) req = req.eq("project_id", projectId);
 
-      // Role-based filtering
-      if (role === "team_member" && user?.id) {
-        req = req.eq("assignee_id", user.id);
-      } else if (role === "client_owner" || role === "client_member") {
+      // Client filtering: only viewable client tasks belonging to their client ID
+      if (isClientRole) {
         if (user?.client_id) {
           req = req.eq("client_id", user.client_id);
         }
@@ -28,20 +26,11 @@ export function useTasks(serviceId?: string, projectId?: string) {
 
       const { data, error } = await req;
       if (error) {
-        console.warn("Tasks query notice, falling back:", error.message);
-        let list = MOCK_TASKS;
-        if (serviceId) list = list.filter((t) => t.service_id === serviceId);
-        if (role === "team_member") list = list.filter((t) => t.assignee_id === user?.id);
-        return list;
+        console.error("Tasks query error:", error.message);
+        return [];
       }
 
-      if (!data || data.length === 0) {
-        let list = MOCK_TASKS;
-        if (serviceId) list = list.filter((t) => t.service_id === serviceId);
-        return list;
-      }
-
-      return data as Task[];
+      return (data || []) as Task[];
     },
   });
 

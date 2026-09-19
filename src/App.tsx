@@ -5,7 +5,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { useRealtimeSync } from "@/hooks/useRealtime";
 
 // Guards
-import { AdminGuard, TeamGuard, ClientGuard, RootRedirect } from "@/components/routes/RoleGuards";
+import { AdminGuard, ClientGuard, RootRedirect } from "@/components/routes/RoleGuards";
+
 
 // Login Pages
 import { AgencyLoginPage } from "@/pages/auth/AgencyLoginPage";
@@ -23,10 +24,8 @@ import { CalendarPage } from "@/pages/CalendarPage";
 import { ReportsPage } from "@/pages/ReportsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 
-// Team Pages
-import { TeamDashboardPage } from "@/pages/team/TeamDashboardPage";
-import { TeamTasksPage } from "@/pages/team/TeamTasksPage";
-import { TeamDeliverablesPage } from "@/pages/team/TeamDeliverablesPage";
+
+
 
 // Client Portal Pages
 import { ClientOverviewPage } from "@/pages/portal/ClientOverviewPage";
@@ -140,49 +139,9 @@ function AppRoutes() {
         }
       />
 
-      {/* Team Member Dedicated Route Group */}
-      <Route
-        path="/team/dashboard"
-        element={
-          <TeamGuard>
-            <TeamDashboardPage />
-          </TeamGuard>
-        }
-      />
-      <Route
-        path="/team/tasks"
-        element={
-          <TeamGuard>
-            <TeamTasksPage />
-          </TeamGuard>
-        }
-      />
-      <Route
-        path="/team/projects"
-        element={
-          <TeamGuard>
-            <ProjectsPage />
-          </TeamGuard>
-        }
-      />
-      <Route
-        path="/team/deliverables"
-        element={
-          <TeamGuard>
-            <TeamDeliverablesPage />
-          </TeamGuard>
-        }
-      />
-      <Route
-        path="/team/calendar"
-        element={
-          <TeamGuard>
-            <CalendarPage />
-          </TeamGuard>
-        }
-      />
 
       {/* Client Portal Dedicated Route Group */}
+
       <Route
         path="/portal/overview"
         element={

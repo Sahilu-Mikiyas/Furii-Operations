@@ -28,7 +28,8 @@ export function ClientOverviewPage() {
   const { invoices } = useInvoices(clientId);
   const { events } = useCalendarEvents(clientId);
 
-  const isClientOwner = role === "client_owner";
+  const isClientOwner = role === "client" || role === "client_owner";
+
 
   const pendingApprovals = approvals.filter(
     (a) => a.status === "awaiting_review" || a.status === "pending"

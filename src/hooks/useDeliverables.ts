@@ -1,12 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Deliverable } from "@/types";
-import { MOCK_DELIVERABLES } from "@/data/mock-data";
 import { useAuth } from "@/lib/auth";
 
 export function useDeliverables(serviceId?: string, projectId?: string) {
   const queryClient = useQueryClient();
   const { user, role } = useAuth();
+  const isClientRole = role === "client" || role === "client_owner" || role === "client_member";
 
   const query = useQuery({
     queryKey: ["deliverables", serviceId || "all", projectId || "all", role],
@@ -22,27 +22,17 @@ export function useDeliverables(serviceId?: string, projectId?: string) {
       if (serviceId) req = req.eq("service_id", serviceId);
       if (projectId) req = req.eq("project_id", projectId);
 
-      if (role === "client_owner" || role === "client_member") {
-        if (user?.client_id) {
-          req = req.eq("client_id", user.client_id);
-        }
+      if (isClientRole && user?.client_id) {
+        req = req.eq("client_id", user.client_id);
       }
 
       const { data, error } = await req;
       if (error) {
-        console.warn("Deliverables query notice, falling back:", error.message);
-        let list = MOCK_DELIVERABLES;
-        if (serviceId) list = list.filter((d) => d.service_id === serviceId);
-        return list;
+        console.error("Deliverables query error:", error.message);
+        return [];
       }
 
-      if (!data || data.length === 0) {
-        let list = MOCK_DELIVERABLES;
-        if (serviceId) list = list.filter((d) => d.service_id === serviceId);
-        return list;
-      }
-
-      return data as unknown as Deliverable[];
+      return (data || []) as unknown as Deliverable[];
     },
   });
 

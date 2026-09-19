@@ -2,7 +2,9 @@
 // Enums & Literals
 // ─────────────────────────────────────────────
 
-export type UserRole = "super_admin" | "admin" | "team_member" | "client_owner" | "client_member";
+export type UserRole = "manager" | "client" | "super_admin" | "admin" | "team_member" | "client_owner" | "client_member";
+export type EffectiveRole = "manager" | "client";
+
 
 export type ClientStatus = "active" | "inactive" | "archived";
 

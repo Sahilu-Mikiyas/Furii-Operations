@@ -10,10 +10,11 @@ import { motion } from "framer-motion";
 export function ClientFinancialsPage() {
   const { currentClient, currency, setCurrency, role } = useAuth();
 
-  // Strict role guard: only client_owner can view financials
-  if (role !== "client_owner") {
+  // Strict role guard: only client (or client_owner) can view financials
+  if (role !== "client" && role !== "client_owner") {
     return <Navigate to="/portal/overview" replace />;
   }
+
 
   const { invoices, isLoading } = useInvoices(currentClient?.id);
 

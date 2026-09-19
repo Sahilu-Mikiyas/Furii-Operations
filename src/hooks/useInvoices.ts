@@ -1,28 +1,29 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Invoice, Payment, PaymentMethod } from "@/types";
-import { MOCK_INVOICES, MOCK_PAYMENTS } from "@/data/mock-data";
 import { useAuth } from "@/lib/auth";
 
 export function useInvoices(clientId?: string) {
   const queryClient = useQueryClient();
   const { user, role, currency } = useAuth();
+  const isClientRole = role === "client" || role === "client_owner" || role === "client_member";
 
   const query = useQuery({
     queryKey: ["invoices", clientId || "all", role, user?.id, currency],
     queryFn: async (): Promise<{ invoices: Invoice[]; payments: Payment[] }> => {
-      // Team members have no financial visibility
-      if (role === "team_member" || role === "client_member") {
-        return { invoices: [], payments: [] };
-      }
-
-      let invReq = supabase.from("invoices").select("*").order("created_at", { ascending: false });
-      let payReq = supabase.from("payments").select("*").order("payment_date", { ascending: false });
+      let invReq = supabase
+        .from("invoices")
+        .select(`*, items:invoice_items(*)`)
+        .order("created_at", { ascending: false });
+      let payReq = supabase
+        .from("payments")
+        .select("*")
+        .order("payment_date", { ascending: false });
 
       if (clientId) {
         invReq = invReq.eq("client_id", clientId);
         payReq = payReq.eq("client_id", clientId);
-      } else if (role === "client_owner" && user?.client_id) {
+      } else if (isClientRole && user?.client_id) {
         invReq = invReq.eq("client_id", user.client_id);
         payReq = payReq.eq("client_id", user.client_id);
       }
@@ -32,17 +33,11 @@ export function useInvoices(clientId?: string) {
         payReq,
       ]);
 
-      if (invErr || !invData || invData.length === 0) {
-        let list = MOCK_INVOICES;
-        if (clientId) list = list.filter((i) => i.client_id === clientId);
-        return {
-          invoices: list,
-          payments: MOCK_PAYMENTS,
-        };
-      }
+      if (invErr) console.error("Invoices fetch error:", invErr.message);
+      if (payErr) console.error("Payments fetch error:", payErr.message);
 
       return {
-        invoices: invData as Invoice[],
+        invoices: (invData || []) as Invoice[],
         payments: (payData || []) as Payment[],
       };
     },

@@ -1,12 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Approval, ApprovalStatus } from "@/types";
-import { MOCK_APPROVALS } from "@/data/mock-data";
 import { useAuth } from "@/lib/auth";
 
 export function useApprovals(clientId?: string) {
   const queryClient = useQueryClient();
   const { user, role } = useAuth();
+  const isClientRole = role === "client" || role === "client_owner" || role === "client_member";
 
   const query = useQuery({
     queryKey: ["approvals", clientId || "all", role, user?.id],
@@ -22,27 +22,17 @@ export function useApprovals(clientId?: string) {
 
       if (clientId) {
         req = req.eq("client_id", clientId);
-      } else if (role === "client_owner" || role === "client_member") {
-        if (user?.client_id) {
-          req = req.eq("client_id", user.client_id);
-        }
+      } else if (isClientRole && user?.client_id) {
+        req = req.eq("client_id", user.client_id);
       }
 
       const { data, error } = await req;
       if (error) {
-        console.warn("Approvals query notice, falling back:", error.message);
-        let list = MOCK_APPROVALS;
-        if (clientId) list = list.filter((a) => a.client_id === clientId);
-        return list;
+        console.error("Approvals query error:", error.message);
+        return [];
       }
 
-      if (!data || data.length === 0) {
-        let list = MOCK_APPROVALS;
-        if (clientId) list = list.filter((a) => a.client_id === clientId);
-        return list;
-      }
-
-      return data as unknown as Approval[];
+      return (data || []) as unknown as Approval[];
     },
   });
 

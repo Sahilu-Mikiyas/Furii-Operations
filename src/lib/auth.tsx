@@ -52,8 +52,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabase.from("memberships").select("*").eq("user_id", authUser.id).maybeSingle(),
       ]);
 
-      const resolvedRole = (member?.role as UserRole) || (authUser.user_metadata?.role as UserRole) || "team_member";
+      const rawRole = (member?.role as UserRole) || (authUser.user_metadata?.role as UserRole) || "client";
+      
+      // Normalize: all admin-type roles → "manager", all client-type → "client"
+      const normalizeRole = (r: UserRole): UserRole => {
+        if (r === "super_admin" || r === "admin" || r === "manager") return "manager";
+        if (r === "client_owner" || r === "client_member" || r === "client") return "client";
+        return "client"; // safe fallback
+      };
+      const resolvedRole = normalizeRole(rawRole);
       const resolvedClientId = member?.client_id || prof?.client_id || null;
+
 
       const userProfile: Profile = prof || {
         id: authUser.id,
