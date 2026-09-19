@@ -1,0 +1,29 @@
+import React, { useState } from "react";
+import { TeamSidebar } from "@/components/navigation/TeamSidebar";
+import { TopBar } from "@/components/navigation/TopBar";
+import { CommandPalette } from "@/components/search/CommandPalette";
+
+interface TeamLayoutProps {
+  children: React.ReactNode;
+}
+
+export function TeamLayout({ children }: TeamLayoutProps) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground flex antialiased">
+      <TeamSidebar isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
+      <div className="flex-1 flex flex-col min-w-0">
+        <TopBar
+          onOpenSearch={() => setSearchOpen(true)}
+          onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+        />
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+          {children}
+        </main>
+      </div>
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} />
+    </div>
+  );
+}

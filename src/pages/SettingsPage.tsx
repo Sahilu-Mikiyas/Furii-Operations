@@ -1,80 +1,102 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { useAuth, ROLE_PRESETS } from "@/lib/auth";
-import { Building2, Users, Shield, ShieldAlert, Plus, Check, Loader2 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { Building2, Users, Plus, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import type { UserRole } from "@/types";
 
 export function SettingsPage() {
-  const { currency, setCurrency, role, switchRole, user } = useAuth();
+  const { currency, setCurrency, role, user } = useAuth();
   const [orgName, setOrgName] = useState("Furii");
   const [website, setWebsite] = useState("https://furii.agency");
 
-  const [teamMembers, setTeamMembers] = useState([
-    {
-      id: "u-1",
-      full_name: "Mikiyas Sahilu",
-      email: "mikiyas@furii.agency",
-      role: "super_admin" as UserRole,
-      title: "Founder & Creative Director",
-    },
-    {
-      id: "u-2",
-      full_name: "Bezawit Habte",
-      email: "bezawit@furii.agency",
-      role: "admin" as UserRole,
-      title: "Head of Project Operations",
-    },
-    {
-      id: "u-3",
-      full_name: "Dawit K.",
-      email: "dawi@furii.agency",
-      role: "team_member" as UserRole,
-      title: "Senior Full-Stack Developer",
-    },
-    {
-      id: "u-4",
-      full_name: "Selamawit T.",
-      email: "selam@furii.agency",
-      role: "team_member" as UserRole,
-      title: "Brand & Visual Designer",
-    },
-  ]);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [loadingTeam, setLoadingTeam] = useState(true);
 
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("team_member");
   const [inviteTitle, setInviteTitle] = useState("");
+  const [submittingInvite, setSubmittingInvite] = useState(false);
 
   const isSuperAdmin = role === "super_admin";
+
+  const fetchTeam = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(`
+          id,
+          full_name,
+          email,
+          title,
+          memberships:memberships(role)
+        `);
+
+      if (!error && data && data.length > 0) {
+        setTeamMembers(
+          data.map((p: any) => ({
+            id: p.id,
+            full_name: p.full_name,
+            email: p.email,
+            title: p.title || "Specialist",
+            role: p.memberships?.[0]?.role || "team_member",
+          }))
+        );
+      }
+    } catch (err) {
+      console.warn("Team fetch notice:", err);
+    } finally {
+      setLoadingTeam(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTeam();
+  }, []);
 
   const handleSaveAgency = (e: React.FormEvent) => {
     e.preventDefault();
     toast.success("Agency identity updated successfully.");
   };
 
-  const handleInviteMember = (e: React.FormEvent) => {
+  const handleInviteMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteName.trim() || !inviteEmail.trim()) return;
+    setSubmittingInvite(true);
 
-    setTeamMembers([
-      ...teamMembers,
-      {
-        id: `u-${Date.now()}`,
-        full_name: inviteName,
+    try {
+      // Create record in profiles table
+      const newUserId = `user-${Date.now()}`;
+      await supabase.from("profiles").insert({
+        id: newUserId,
+        organization_id: "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
         email: inviteEmail,
-        role: inviteRole,
+        full_name: inviteName,
         title: inviteTitle || "Contributor",
-      },
-    ]);
+      });
 
-    toast.success(`Invitation generated for ${inviteEmail}.`);
-    setInviteName("");
-    setInviteEmail("");
-    setInviteTitle("");
-    setShowInviteModal(false);
+      await supabase.from("memberships").insert({
+        organization_id: "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
+        user_id: newUserId,
+        role: inviteRole,
+        is_active: true,
+      });
+
+      toast.success(`Invitation created for ${inviteEmail}.`);
+      setInviteName("");
+      setInviteEmail("");
+      setInviteTitle("");
+      setShowInviteModal(false);
+      fetchTeam();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create invitation.");
+    } finally {
+      setSubmittingInvite(false);
+    }
   };
 
   return (
@@ -85,61 +107,9 @@ export function SettingsPage() {
       className="space-y-6 max-w-4xl"
     >
       <PageHeader
-        title="Platform & Team Settings"
-        description="Configure organization details, team roles, default currencies, and security policies."
+        title="Platform & Agency Settings"
+        description="Configure agency identity, manage internal team roster, and set operational defaults."
       />
-
-      {/* Role Switcher for Interactive Verification */}
-      <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-              <Shield className="w-4 h-4 text-primary" />
-              Perspective & Role Switcher
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Test what each role experiences in real time across dashboards, deliverables, and financials.
-            </p>
-          </div>
-          <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-            Active: {role.replace("_", " ")}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {(
-            [
-              { roleId: "super_admin", label: "Super Admin", desc: "Full control, revenue, & all clients" },
-              { roleId: "admin", label: "Project Manager", desc: "Delivery lead, operations, & review" },
-              { roleId: "team_member", label: "Team Member", desc: "Assigned tasks & technical work logs" },
-              { roleId: "client_owner", label: "Client Owner", desc: "Client CEO portal & deliverable approvals" },
-              { roleId: "client_member", label: "Client Member", desc: "View-only client staff member" },
-            ] as const
-          ).map((r) => {
-            const isSelected = role === r.roleId;
-            return (
-              <button
-                key={r.roleId}
-                onClick={() => {
-                  switchRole(r.roleId);
-                  toast.success(`Switched active view to ${r.label}`);
-                }}
-                className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer space-y-1 ${
-                  isSelected
-                    ? "bg-primary/5 border-primary ring-1 ring-primary/30"
-                    : "bg-secondary/30 hover:bg-secondary/60 border-border"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-foreground">{r.label}</span>
-                  {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
-                </div>
-                <p className="text-[10px] text-muted-foreground line-clamp-1">{r.desc}</p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       {/* Organization Details */}
       <form onSubmit={handleSaveAgency} className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
@@ -225,7 +195,7 @@ export function SettingsPage() {
           <div className="space-y-0.5">
             <h3 className="text-sm font-bold text-foreground uppercase tracking-wider font-mono flex items-center gap-2">
               <Users className="h-4 w-4" />
-              Team Roster & Role-Based Access
+              Team Roster & Roles
             </h3>
             <p className="text-xs text-muted-foreground">Internal agency staff and operational roles.</p>
           </div>
@@ -241,30 +211,36 @@ export function SettingsPage() {
           )}
         </div>
 
-        <div className="divide-y divide-border/60">
-          {teamMembers.map((member) => (
-            <div key={member.id} className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center">
-                  {member.full_name.slice(0, 2).toUpperCase()}
+        {loadingTeam ? (
+          <div className="py-6 flex justify-center text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
+          </div>
+        ) : (
+          <div className="divide-y divide-border/60">
+            {teamMembers.map((member) => (
+              <div key={member.id} className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center">
+                    {member.full_name ? member.full_name.slice(0, 2).toUpperCase() : "TM"}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-foreground">{member.full_name}</p>
+                    <p className="text-[11px] text-muted-foreground">{member.email}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-foreground">{member.full_name}</p>
-                  <p className="text-[11px] text-muted-foreground">{member.email}</p>
-                </div>
-              </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-secondary border border-border text-foreground">
-                  {member.title}
-                </span>
-                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
-                  {member.role.replace("_", " ")}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-secondary border border-border text-foreground">
+                    {member.title}
+                  </span>
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                    {String(member.role).replace("_", " ")}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Invite Modal */}
@@ -337,9 +313,11 @@ export function SettingsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer"
+                  disabled={submittingInvite}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                 >
-                  Send Invitation
+                  {submittingInvite && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Create Team Member
                 </button>
               </div>
             </form>

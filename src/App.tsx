@@ -1,11 +1,17 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/lib/auth";
-import { NavShell } from "@/components/nav-shell";
 import { Toaster } from "@/components/ui/sonner";
 import { useRealtimeSync } from "@/hooks/useRealtime";
 
-// Pages
+// Guards
+import { AdminGuard, TeamGuard, ClientGuard, RootRedirect } from "@/components/routes/RoleGuards";
+
+// Login Pages
+import { AgencyLoginPage } from "@/pages/auth/AgencyLoginPage";
+import { ClientLoginPage } from "@/pages/auth/ClientLoginPage";
+
+// Admin Pages
 import { DashboardPage } from "@/pages/DashboardPage";
 import { ClientsPage } from "@/pages/ClientsPage";
 import { ProjectsPage } from "@/pages/ProjectsPage";
@@ -16,8 +22,19 @@ import { FilesPage } from "@/pages/FilesPage";
 import { CalendarPage } from "@/pages/CalendarPage";
 import { ReportsPage } from "@/pages/ReportsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
-import { AuthPage } from "@/pages/AuthPage";
-import { ClientPortalLoginPage } from "@/pages/ClientPortalLoginPage";
+
+// Team Pages
+import { TeamDashboardPage } from "@/pages/team/TeamDashboardPage";
+import { TeamTasksPage } from "@/pages/team/TeamTasksPage";
+import { TeamDeliverablesPage } from "@/pages/team/TeamDeliverablesPage";
+
+// Client Portal Pages
+import { ClientOverviewPage } from "@/pages/portal/ClientOverviewPage";
+import { ClientApprovalsPage } from "@/pages/portal/ClientApprovalsPage";
+import { ClientServicesPage } from "@/pages/portal/ClientServicesPage";
+import { ClientFilesPage } from "@/pages/portal/ClientFilesPage";
+import { ClientFinancialsPage } from "@/pages/portal/ClientFinancialsPage";
+import { ClientSchedulePage } from "@/pages/portal/ClientSchedulePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,23 +49,203 @@ function AppRoutes() {
   useRealtimeSync();
 
   return (
-    <NavShell>
-      <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/clients" element={<ClientsPage />} />
-        <Route path="/projects" element={<ProjectsPage />} />
-        <Route path="/tasks" element={<TasksPage />} />
-        <Route path="/approvals" element={<ApprovalsPage />} />
-        <Route path="/payments" element={<PaymentsPage />} />
-        <Route path="/files" element={<FilesPage />} />
-        <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/auth" element={<AuthPage />} />
-        <Route path="/portal/login" element={<ClientPortalLoginPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </NavShell>
+    <Routes>
+      {/* Root Entry */}
+      <Route path="/" element={<RootRedirect />} />
+
+      {/* Authentication Gates */}
+      <Route path="/auth/agency" element={<AgencyLoginPage />} />
+      <Route path="/portal/login" element={<ClientLoginPage />} />
+      <Route path="/auth" element={<Navigate to="/auth/agency" replace />} />
+
+      {/* Admin / Project Manager Dedicated Route Group */}
+      <Route
+        path="/admin/dashboard"
+        element={
+          <AdminGuard>
+            <DashboardPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/clients"
+        element={
+          <AdminGuard>
+            <ClientsPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/projects"
+        element={
+          <AdminGuard>
+            <ProjectsPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/tasks"
+        element={
+          <AdminGuard>
+            <TasksPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/approvals"
+        element={
+          <AdminGuard>
+            <ApprovalsPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/payments"
+        element={
+          <AdminGuard>
+            <PaymentsPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/files"
+        element={
+          <AdminGuard>
+            <FilesPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/calendar"
+        element={
+          <AdminGuard>
+            <CalendarPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/reports"
+        element={
+          <AdminGuard>
+            <ReportsPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/settings"
+        element={
+          <AdminGuard>
+            <SettingsPage />
+          </AdminGuard>
+        }
+      />
+
+      {/* Team Member Dedicated Route Group */}
+      <Route
+        path="/team/dashboard"
+        element={
+          <TeamGuard>
+            <TeamDashboardPage />
+          </TeamGuard>
+        }
+      />
+      <Route
+        path="/team/tasks"
+        element={
+          <TeamGuard>
+            <TeamTasksPage />
+          </TeamGuard>
+        }
+      />
+      <Route
+        path="/team/projects"
+        element={
+          <TeamGuard>
+            <ProjectsPage />
+          </TeamGuard>
+        }
+      />
+      <Route
+        path="/team/deliverables"
+        element={
+          <TeamGuard>
+            <TeamDeliverablesPage />
+          </TeamGuard>
+        }
+      />
+      <Route
+        path="/team/calendar"
+        element={
+          <TeamGuard>
+            <CalendarPage />
+          </TeamGuard>
+        }
+      />
+
+      {/* Client Portal Dedicated Route Group */}
+      <Route
+        path="/portal/overview"
+        element={
+          <ClientGuard>
+            <ClientOverviewPage />
+          </ClientGuard>
+        }
+      />
+      <Route
+        path="/portal/approvals"
+        element={
+          <ClientGuard>
+            <ClientApprovalsPage />
+          </ClientGuard>
+        }
+      />
+      <Route
+        path="/portal/services"
+        element={
+          <ClientGuard>
+            <ClientServicesPage />
+          </ClientGuard>
+        }
+      />
+      <Route
+        path="/portal/files"
+        element={
+          <ClientGuard>
+            <ClientFilesPage />
+          </ClientGuard>
+        }
+      />
+      <Route
+        path="/portal/financials"
+        element={
+          <ClientGuard>
+            <ClientFinancialsPage />
+          </ClientGuard>
+        }
+      />
+      <Route
+        path="/portal/schedule"
+        element={
+          <ClientGuard>
+            <ClientSchedulePage />
+          </ClientGuard>
+        }
+      />
+
+      {/* Legacy Redirects */}
+      <Route path="/clients" element={<Navigate to="/admin/clients" replace />} />
+      <Route path="/projects" element={<Navigate to="/admin/projects" replace />} />
+      <Route path="/tasks" element={<Navigate to="/admin/tasks" replace />} />
+      <Route path="/approvals" element={<Navigate to="/admin/approvals" replace />} />
+      <Route path="/payments" element={<Navigate to="/admin/payments" replace />} />
+      <Route path="/files" element={<Navigate to="/admin/files" replace />} />
+      <Route path="/calendar" element={<Navigate to="/admin/calendar" replace />} />
+      <Route path="/reports" element={<Navigate to="/admin/reports" replace />} />
+      <Route path="/settings" element={<Navigate to="/admin/settings" replace />} />
+
+      {/* Catch-all */}
+      <Route path="*" element={<RootRedirect />} />
+    </Routes>
   );
 }
 

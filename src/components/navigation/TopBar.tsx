@@ -6,26 +6,22 @@ import {
   Search,
   Bell,
   CheckCircle2,
-  Building,
+  LogOut,
+  Menu,
 } from "lucide-react";
-import type { UserRole } from "@/types";
 
 interface TopBarProps {
   onOpenSearch?: () => void;
+  onToggleMobileMenu?: () => void;
 }
 
-export function TopBar({ onOpenSearch }: TopBarProps) {
+export function TopBar({ onOpenSearch, onToggleMobileMenu }: TopBarProps) {
   const {
     user,
     role,
-    switchRole,
-    workspaceMode,
-    setWorkspaceMode,
-    currentClient,
-    setCurrentClient,
     currency,
     setCurrency,
-    availableClients,
+    signOut,
   } = useAuth();
 
   const { approvals } = useApprovals();
@@ -61,30 +57,40 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
   };
 
   return (
-    <header className="h-16 border-b border-border/80 bg-background/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-10">
-      {/* Search trigger */}
+    <header className="h-16 border-b border-border/80 bg-background/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30">
+      {/* Left: Mobile hamburger & Global Search */}
       <div className="flex items-center gap-3 flex-1 max-w-md">
+        {onToggleMobileMenu && (
+          <button
+            onClick={onToggleMobileMenu}
+            aria-label="Toggle mobile menu"
+            className="md:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
+
         <button
           onClick={onOpenSearch}
           className="w-full flex items-center justify-between px-3.5 py-1.5 text-xs text-muted-foreground bg-card hover:bg-secondary/70 border border-border rounded-lg shadow-2xs transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <Search className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>Search live clients, projects, tasks, files...</span>
+            <span className="truncate">Search records, tasks, deliverables...</span>
           </div>
-          <kbd className="font-mono text-[10px] bg-secondary px-1.5 py-0.5 rounded border border-border text-muted-foreground">
+          <kbd className="hidden sm:inline-block font-mono text-[10px] bg-secondary px-1.5 py-0.5 rounded border border-border text-muted-foreground">
             ⌘K
           </kbd>
         </button>
       </div>
 
-      {/* Control bar */}
-      <div className="flex items-center gap-3">
+      {/* Right Control Bar */}
+      <div className="flex items-center gap-2 sm:gap-3">
         {/* Currency Switcher */}
-        <div className="flex items-center bg-secondary/70 p-0.5 rounded-lg border border-border">
+        <div className="flex items-center bg-secondary/70 p-0.5 rounded-lg border border-border text-xs">
           <button
             onClick={() => setCurrency("ETB")}
-            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+            className={`px-2 py-0.5 sm:px-2.5 sm:py-1 font-semibold rounded-md transition-colors cursor-pointer ${
               currency === "ETB"
                 ? "bg-primary text-primary-foreground shadow-2xs"
                 : "text-muted-foreground hover:text-foreground"
@@ -94,7 +100,7 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
           </button>
           <button
             onClick={() => setCurrency("USD")}
-            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+            className={`px-2 py-0.5 sm:px-2.5 sm:py-1 font-semibold rounded-md transition-colors cursor-pointer ${
               currency === "USD"
                 ? "bg-primary text-primary-foreground shadow-2xs"
                 : "text-muted-foreground hover:text-foreground"
@@ -102,66 +108,6 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
           >
             USD
           </button>
-        </div>
-
-        {/* Client Account Selector (In Client Mode) */}
-        {workspaceMode === "client" && (
-          <div className="hidden sm:flex items-center gap-1.5 bg-card border border-border rounded-lg px-2.5 py-1 shadow-2xs">
-            <Building className="h-3.5 w-3.5 text-primary" />
-            <select
-              value={currentClient?.id || ""}
-              onChange={(e) => {
-                const found = availableClients.find((c) => c.id === e.target.value);
-                if (found) setCurrentClient(found);
-              }}
-              className="text-xs font-semibold bg-transparent text-foreground focus:outline-hidden cursor-pointer"
-            >
-              {availableClients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Workspace Mode Indicator / Quick Switcher */}
-        <div className="flex items-center bg-secondary/70 p-0.5 rounded-lg border border-border text-xs">
-          <button
-            onClick={() => setWorkspaceMode("admin")}
-            className={`px-2.5 py-1 font-semibold rounded-md transition-colors cursor-pointer ${
-              workspaceMode === "admin"
-                ? "bg-card text-foreground shadow-2xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Agency Ops
-          </button>
-          <button
-            onClick={() => setWorkspaceMode("client")}
-            className={`px-2.5 py-1 font-semibold rounded-md transition-colors cursor-pointer ${
-              workspaceMode === "client"
-                ? "bg-card text-foreground shadow-2xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Client View
-          </button>
-        </div>
-
-        {/* Perspective Role Switcher */}
-        <div className="relative">
-          <select
-            value={role}
-            onChange={(e) => switchRole(e.target.value as UserRole)}
-            className="text-xs font-mono font-semibold bg-secondary/70 border border-border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-hidden cursor-pointer"
-          >
-            <option value="super_admin">⚡ Super Admin</option>
-            <option value="admin">💼 Project Manager</option>
-            <option value="team_member">🛠️ Team Member</option>
-            <option value="client_owner">👑 Client Owner</option>
-            <option value="client_member">👥 Client Member</option>
-          </select>
         </div>
 
         {/* Notifications */}
@@ -177,7 +123,7 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 rounded-xl bg-card border border-border shadow-lg p-3 z-50 animate-in fade-in zoom-in-95">
+            <div className="absolute right-0 mt-2 w-80 rounded-xl bg-card border border-border shadow-xl p-3 z-50 animate-in fade-in zoom-in-95">
               <div className="flex items-center justify-between pb-2 border-b border-border/80">
                 <span className="text-xs font-bold text-foreground">
                   Notifications {unreadCount > 0 && `(${unreadCount})`}
@@ -194,7 +140,7 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
               <div className="divide-y divide-border/60 max-h-72 overflow-y-auto mt-2">
                 {liveNotifications.length === 0 ? (
                   <div className="py-4 text-center text-xs text-muted-foreground">
-                    All caught up! No active review notices.
+                    All caught up! No active notices.
                   </div>
                 ) : (
                   liveNotifications.map((n) => (
@@ -212,6 +158,20 @@ export function TopBar({ onOpenSearch }: TopBarProps) {
               </div>
             </div>
           )}
+        </div>
+
+        {/* User Badge & Sign Out */}
+        <div className="flex items-center gap-2 pl-2 border-l border-border/80">
+          <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center shrink-0">
+            {user?.full_name ? user.full_name.slice(0, 2).toUpperCase() : "FU"}
+          </div>
+          <button
+            onClick={() => signOut()}
+            title="Sign Out"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </header>

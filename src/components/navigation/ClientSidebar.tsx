@@ -1,124 +1,180 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { useApprovals } from "@/hooks/useApprovals";
 import {
   LayoutDashboard,
-  Briefcase,
   FileCheck2,
+  Layers,
   FolderOpen,
   Receipt,
   Calendar,
-  ArrowLeft,
+  LogOut,
+  X,
   Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MOCK_APPROVALS } from "@/data/mock-data";
 
-const CLIENT_NAV = [
-  { label: "Overview", href: "/", icon: LayoutDashboard },
-  { label: "Projects", href: "/projects", icon: Briefcase },
-  { label: "Approvals", href: "/approvals", icon: FileCheck2, badge: true },
-  { label: "Files & Assets", href: "/files", icon: FolderOpen },
-  { label: "Financials", href: "/payments", icon: Receipt },
-  { label: "Schedule", href: "/calendar", icon: Calendar },
-];
+interface ClientSidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
 
-export function ClientSidebar() {
-  const { currentClient, setWorkspaceMode } = useAuth();
+export function ClientSidebar({ isOpen, onClose }: ClientSidebarProps) {
+  const { currentClient, role, user, signOut } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
 
-  const pendingApprovalsCount = MOCK_APPROVALS.filter(
-    (a) => a.status === "awaiting_review"
+  const { approvals } = useApprovals(currentClient?.id);
+  const pendingApprovalsCount = approvals.filter(
+    (a) => a.status === "awaiting_review" || a.status === "pending"
   ).length;
 
+  const isClientOwner = role === "client_owner";
+
+  const CLIENT_NAV = [
+    { label: "Executive Overview", href: "/portal/overview", icon: LayoutDashboard },
+    {
+      label: "Review & Approvals",
+      href: "/portal/approvals",
+      icon: FileCheck2,
+      badgeCount: pendingApprovalsCount,
+    },
+    { label: "Active Services", href: "/portal/services", icon: Layers },
+    { label: "Brand & Asset Vault", href: "/portal/files", icon: FolderOpen },
+    ...(isClientOwner
+      ? [{ label: "Financial Statement", href: "/portal/financials", icon: Receipt }]
+      : []),
+    { label: "Production Timeline", href: "/portal/schedule", icon: Calendar },
+  ];
+
   return (
-    <aside className="w-64 border-r border-border bg-sidebar flex flex-col shrink-0 h-screen sticky top-0 select-none z-20">
-      {/* Brand Header */}
-      <div className="h-16 border-b border-border/80 px-6 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <img
-            src="/brand/furii-logo-horizontal.jpg"
-            alt="Furii"
-            className="h-7 w-auto object-contain"
-          />
-        </Link>
-        <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
-          Client Portal
-        </span>
-      </div>
+    <>
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div
+          onClick={onClose}
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs md:hidden animate-in fade-in"
+        />
+      )}
 
-      {/* Client Identity Card */}
-      <div className="p-4 mx-3 my-3 rounded-xl bg-card border border-border/80 space-y-1">
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-            <Building2 className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold text-foreground truncate">
-              {currentClient?.name || "Ersas Interiors"}
-            </p>
-            <p className="text-[10px] text-muted-foreground truncate">
-              {currentClient?.industry || "Client Workspace"}
-            </p>
+      <aside
+        className={cn(
+          "w-64 border-r border-border bg-sidebar flex flex-col shrink-0 h-screen sticky top-0 select-none z-40 transition-transform duration-200 ease-in-out",
+          "fixed md:static inset-y-0 left-0",
+          isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        )}
+      >
+        {/* Brand Header */}
+        <div className="h-16 border-b border-border/80 px-6 flex items-center justify-between">
+          <Link to="/portal/overview" className="flex items-center gap-2">
+            <img
+              src="/brand/furii-logo-horizontal.jpg"
+              alt="Furii"
+              className="h-7 w-auto object-contain"
+            />
+          </Link>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+              Client Portal
+            </span>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="md:hidden p-1 rounded-md text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* Navigation Links */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-        <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80 font-mono">
-          Workspace
+        {/* Client Identity Card */}
+        <div className="p-4 mx-3 my-3 rounded-xl bg-card border border-border/80 space-y-1">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center font-bold text-xs shrink-0">
+              <Building2 className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-foreground truncate">
+                {currentClient?.name || "Corporate Client"}
+              </p>
+              <p className="text-[10px] text-muted-foreground truncate">
+                {currentClient?.industry || "Enterprise Account"}
+              </p>
+            </div>
+          </div>
         </div>
-        {CLIENT_NAV.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            item.href === "/"
-              ? currentPath === "/"
-              : currentPath.startsWith(item.href);
 
-          return (
-            <Link
-              key={item.href}
-              to={item.href}
-              className={cn(
-                "flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/70"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <Icon className="h-4 w-4 shrink-0" />
-                <span>{item.label}</span>
+        {/* Navigation Links */}
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+          <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground font-mono">
+            Workspace
+          </div>
+          {CLIENT_NAV.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentPath === item.href;
+
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                onClick={onClose}
+                className={cn(
+                  "flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-colors",
+                  isActive
+                    ? "bg-primary text-primary-foreground shadow-2xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/70"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span>{item.label}</span>
+                </div>
+                {item.badgeCount !== undefined && item.badgeCount > 0 && (
+                  <span
+                    className={cn(
+                      "font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-full",
+                      isActive
+                        ? "bg-white text-primary"
+                        : "bg-amber-100 text-amber-900 border border-amber-300"
+                    )}
+                  >
+                    {item.badgeCount}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* User Identity & Logout */}
+        <div className="p-3 border-t border-border/80 bg-sidebar">
+          <div className="flex items-center justify-between p-2 rounded-xl bg-card border border-border/60">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="h-8 w-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                {user?.full_name ? user.full_name.slice(0, 2).toUpperCase() : "CL"}
               </div>
-              {item.badge && pendingApprovalsCount > 0 && (
-                <span
-                  className={cn(
-                    "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full",
-                    isActive
-                      ? "bg-white/20 text-white"
-                      : "bg-amber-100 text-amber-800"
-                  )}
-                >
-                  {pendingApprovalsCount}
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-foreground truncate">
+                  {user?.full_name || "Client Executive"}
+                </p>
+                <span className="text-[10px] font-mono text-muted-foreground block truncate">
+                  {user?.title || (isClientOwner ? "Owner" : "Stakeholder")}
                 </span>
-              )}
-            </Link>
-          );
-        })}
-      </div>
+              </div>
+            </div>
 
-      {/* Switch to Admin Mode */}
-      <div className="p-3 border-t border-border/80 bg-sidebar">
-        <button
-          onClick={() => setWorkspaceMode("admin")}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground bg-secondary hover:bg-secondary/80 rounded-lg transition-colors border border-border cursor-pointer"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Admin Operations
-        </button>
-      </div>
-    </aside>
+            <button
+              onClick={() => signOut()}
+              title="Sign Out"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }
