@@ -21,7 +21,7 @@ import {
 import { motion } from "framer-motion";
 
 export function ClientsPage() {
-  const { role, setCurrentClient, setWorkspaceMode } = useAuth();
+  const { role, setCurrentClient } = useAuth();
   const { clients, createClient, updateHealth, isCreating } = useClients();
   const { projects } = useProjects();
 
@@ -88,7 +88,6 @@ export function ClientsPage() {
 
   const handleOpenClientWorkspace = (client: any) => {
     setCurrentClient(client);
-    setWorkspaceMode("client");
   };
 
   return (

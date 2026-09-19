@@ -4,43 +4,33 @@ import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
 import { useApprovals } from "@/hooks/useApprovals";
 import { useInvoices } from "@/hooks/useInvoices";
-import { useServices } from "@/hooks/useServices";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { useActivityLogs } from "@/hooks/useActivityLogs";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { ProgressBar } from "@/components/shared/ProgressBar";
 import { formatCurrency, formatDate, formatRelativeDate } from "@/lib/utils";
 import {
   Users,
   Briefcase,
   FileCheck2,
   Receipt,
-  ArrowRight,
-  Clock,
   Calendar,
   AlertTriangle,
-  Layers,
-  Sparkles,
   Loader2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
+
 export function DashboardPage() {
-  const { workspaceMode, currency, setWorkspaceMode, currentClient, role } = useAuth();
-
-  if (workspaceMode === "client") {
-    return <ClientDashboard client={currentClient} currency={currency} role={role} />;
-  }
-
-  return <AdminDashboard currency={currency} onSwitchToClient={() => setWorkspaceMode("client")} />;
+  const { currency } = useAuth();
+  return <AdminDashboard currency={currency} />;
 }
 
 // ─────────────────────────────────────────────
 // Admin Dashboard (Internal Team Operations)
 // ─────────────────────────────────────────────
 
-function AdminDashboard({ currency, onSwitchToClient }: { currency: "ETB" | "USD"; onSwitchToClient: () => void }) {
+function AdminDashboard({ currency }: { currency: "ETB" | "USD" }) {
   const { clients, isLoading: clientsLoading } = useClients();
   const { projects, isLoading: projectsLoading } = useProjects();
   const { approvals } = useApprovals();
@@ -265,182 +255,4 @@ function AdminDashboard({ currency, onSwitchToClient }: { currency: "ETB" | "USD
   );
 }
 
-// ─────────────────────────────────────────────
-// Client Dashboard (Polished Portal Scoped to Client)
-// ─────────────────────────────────────────────
 
-function ClientDashboard({ client, currency, role }: { client: any; currency: "ETB" | "USD"; role: string }) {
-  const targetClient = client || {
-    id: "client-solomon",
-    name: "Solomon Gold Mining",
-    industry: "Mining & Resources",
-    description: "Mineral exploration and industrial enterprise portal.",
-  };
-
-  const { approvals } = useApprovals(targetClient.id);
-  const { projects } = useProjects(targetClient.id);
-  const { services } = useServices(undefined, targetClient.id);
-  const { invoices } = useInvoices(targetClient.id);
-  const { events } = useCalendarEvents(targetClient.id);
-
-  const pendingApprovals = approvals.filter((a) => a.status === "awaiting_review" || a.status === "pending");
-  const paidTotal = invoices
-    .filter((i) => i.status === "paid")
-    .reduce((acc, i) => acc + Number(i.total || i.amount || 0), 0);
-  const remainingTotal = invoices
-    .filter((i) => i.status === "sent" || i.status === "partially_paid")
-    .reduce((acc, i) => acc + (Number(i.total || i.amount || 0) - Number(i.amount_paid || 0)), 0);
-
-  const isClientMember = role === "client_member";
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
-    >
-      {/* Header with Client Identity */}
-      <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono uppercase tracking-widest text-primary font-bold">Client Workspace</span>
-            <span className="text-muted-foreground">•</span>
-            <span className="text-xs text-muted-foreground font-medium">{targetClient.industry}</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">{targetClient.name}</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl">{targetClient.description}</p>
-        </div>
-
-        <div className="p-4 rounded-xl bg-secondary/60 border border-border/80 shrink-0 min-w-56 space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground font-semibold">Overall Delivery</span>
-            <span className="font-mono font-bold text-foreground text-sm">78%</span>
-          </div>
-          <ProgressBar value={78} showValue={false} />
-        </div>
-      </div>
-
-      {/* Action Required Banner for Client Owner */}
-      {pendingApprovals.length > 0 && !isClientMember && (
-        <div className="p-5 rounded-xl bg-amber-50 border border-amber-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-800 font-bold shrink-0">
-              <Sparkles className="h-5 w-5 text-amber-700" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-amber-950">Action Required: Deliverables Awaiting Sign-Off</h2>
-              <p className="text-xs text-amber-800 mt-0.5">
-                {pendingApprovals.length} item(s) are awaiting your formal approval or change request.
-              </p>
-            </div>
-          </div>
-          <Link
-            to="/approvals"
-            className="px-4 py-2 rounded-lg bg-amber-900 text-amber-50 hover:bg-amber-800 font-semibold text-xs transition-colors shrink-0 shadow-2xs text-center"
-          >
-            Review Deliverables ({pendingApprovals.length}) →
-          </Link>
-        </div>
-      )}
-
-      {/* Active Work Service Areas */}
-      <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-bold text-foreground">Active Work Streams</h2>
-            <p className="text-xs text-muted-foreground">Detailed records of deliverables and technical outputs.</p>
-          </div>
-          <Link to="/projects" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-            All Workspaces <ArrowRight className="h-3 w-3" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {services.map((srv) => (
-            <Link
-              key={srv.id}
-              to="/projects"
-              className="p-4 rounded-xl bg-secondary/30 hover:bg-secondary/70 border border-border/80 transition-all space-y-3 group"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="space-y-0.5">
-                  <span className="text-xs font-mono uppercase text-muted-foreground font-semibold">{srv.service_type}</span>
-                  <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
-                    {srv.name}
-                  </h3>
-                </div>
-                <StatusBadge status={srv.status} />
-              </div>
-
-              <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                {srv.summary || srv.description}
-              </p>
-
-              <div className="space-y-1 pt-1">
-                <ProgressBar value={srv.progress} label="Phase Progress" />
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* Up Next & Financial Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Up Next */}
-        <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-foreground">Up Next on Schedule</h2>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </div>
-
-          <div className="space-y-3">
-            {events.slice(0, 3).map((evt) => (
-              <div key={evt.id} className="p-3.5 rounded-xl bg-secondary/40 border border-border/70 flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="text-xs font-bold text-foreground">{evt.title}</p>
-                  <p className="text-[11px] text-muted-foreground">{evt.description}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <span className="text-xs font-mono font-bold text-primary block">
-                    {formatDate(evt.start_time, "MMM d")}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Financial Summary (Hidden from client_member) */}
-        {!isClientMember && (
-          <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-foreground">Payment Status</h2>
-              <Link to="/payments" className="text-xs font-semibold text-primary hover:underline">
-                View statement →
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-1">
-                <span className="text-[11px] font-semibold text-emerald-800 uppercase font-mono">Paid to Date</span>
-                <p className="text-2xl font-bold font-mono text-emerald-950">
-                  {formatCurrency(paidTotal, currency)}
-                </p>
-                <span className="text-[10px] text-emerald-700">Verified Milestone Deposits</span>
-              </div>
-
-              <div className="p-4 rounded-xl bg-secondary/60 border border-border space-y-1">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase font-mono">Remaining Balance</span>
-                <p className="text-2xl font-bold font-mono text-foreground">
-                  {formatCurrency(remainingTotal, currency)}
-                </p>
-                <span className="text-[10px] text-muted-foreground">Due upon Milestone Delivery</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </motion.div>
-  );
-}
