@@ -33,6 +33,8 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { ClientOverviewPage } from "@/pages/portal/ClientOverviewPage";
 import { ClientApprovalsPage } from "@/pages/portal/ClientApprovalsPage";
 import { ClientServicesPage } from "@/pages/portal/ClientServicesPage";
+import { ClientCatalogPage } from "@/pages/portal/ClientCatalogPage";
+import { ClientPaymentPage } from "@/pages/portal/ClientPaymentPage";
 import { ClientFilesPage } from "@/pages/portal/ClientFilesPage";
 import { ClientFinancialsPage } from "@/pages/portal/ClientFinancialsPage";
 import { ClientSchedulePage } from "@/pages/portal/ClientSchedulePage";
@@ -165,6 +167,22 @@ function AppRoutes() {
         element={
           <ClientGuard>
             <ClientServicesPage />
+          </ClientGuard>
+        }
+      />
+      <Route
+        path="/portal/catalog"
+        element={
+          <ClientGuard>
+            <ClientCatalogPage />
+          </ClientGuard>
+        }
+      />
+      <Route
+        path="/portal/payment"
+        element={
+          <ClientGuard>
+            <ClientPaymentPage />
           </ClientGuard>
         }
       />

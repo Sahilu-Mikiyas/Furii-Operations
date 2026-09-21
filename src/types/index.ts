@@ -51,6 +51,9 @@ export type Visibility = "internal" | "client";
 
 export type ClientHealthStatus = "on_track" | "attention_required" | "waiting_for_client" | "delayed";
 
+export type ServiceRequestStatus = "pending" | "payment_review" | "approved" | "declined" | "converted";
+export type ServiceRequestType = "package" | "development" | "branding" | "production" | "custom";
+
 // ─────────────────────────────────────────────
 // Base
 // ─────────────────────────────────────────────
@@ -495,6 +498,31 @@ export interface Notification extends BaseRecord {
   is_read: boolean;
   read_at?: string | null;
   action_url?: string | null;
+}
+
+// ─────────────────────────────────────────────
+// Service Requests
+// ─────────────────────────────────────────────
+
+export interface ServiceRequest extends BaseRecord {
+  organization_id: string;
+  client_id: string;
+  requested_by?: string | null;
+  request_type: ServiceRequestType;
+  title: string;
+  description?: string | null;
+  catalog_items?: any[] | null;
+  estimated_total: number;
+  currency: Currency;
+  urgency: "low" | "normal" | "high" | "urgent";
+  status: ServiceRequestStatus;
+  manager_notes?: string | null;
+  receipt_url?: string | null;
+  payment_notes?: string | null;
+  payment_submitted_at?: string | null;
+  // joined
+  client?: Client;
+  submitter?: Profile;
 }
 
 // ─────────────────────────────────────────────

@@ -21,8 +21,13 @@ import {
   Trash2,
   KeyRound,
   Archive,
+  Receipt,
+  Clock,
+  FileCheck2,
+  Zap,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useServiceRequests } from "@/hooks/useServiceRequests";
 
 
 export function ClientsPage() {
@@ -65,6 +70,10 @@ export function ClientsPage() {
   const [provEmail, setProvEmail] = useState("");
   const [provPassword, setProvPassword] = useState("");
   const [provName, setProvName] = useState("");
+
+  // Service Requests Modal State
+  const { requests, approveAndLaunchProject, isApprovingAndLaunching, updateStatus } = useServiceRequests();
+  const [requestClientModal, setRequestClientModal] = useState<any | null>(null);
 
 
   // Restrict client roles from seeing all agency clients
@@ -226,6 +235,7 @@ export function ClientsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filteredClients.map((client) => {
           const clientProjects = projects.filter((p) => p.client_id === client.id);
+          const clientRequests = requests.filter((r) => r.client_id === client.id);
 
           return (
             <div
@@ -296,6 +306,19 @@ export function ClientsPage() {
                   >
                     <KeyRound className="w-3.5 h-3.5" />
                     <span>Login</span>
+                  </button>
+
+                  <button
+                    onClick={() => setRequestClientModal(client)}
+                    title="View Client Service Requests & Receipts"
+                    className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border font-semibold text-[11px] transition-colors cursor-pointer ${
+                      clientRequests.filter((r) => r.status === "payment_review" || r.status === "pending").length > 0
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
+                        : "border-border bg-secondary/40 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Receipt className="w-3.5 h-3.5" />
+                    <span>Requests ({clientRequests.length})</span>
                   </button>
 
                   <button
@@ -576,6 +599,193 @@ export function ClientsPage() {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Service Requests & Payment Approvals Modal */}
+      {requestClientModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-2xl rounded-2xl border border-border shadow-2xl p-6 space-y-5 max-h-[85vh] flex flex-col"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-4">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                    <Receipt className="w-4 h-4" />
+                  </div>
+                  <h2 className="text-base font-bold text-foreground">
+                    Service Requests & Receipts
+                  </h2>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Review requirements and attached payment slips for{" "}
+                  <span className="font-semibold text-foreground">{requestClientModal.name}</span>.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setRequestClientModal(null)}
+                className="text-muted-foreground hover:text-foreground text-sm font-bold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Requests List */}
+            <div className="overflow-y-auto space-y-4 pr-1 flex-1">
+              {requests.filter((r) => r.client_id === requestClientModal.id).length === 0 ? (
+                <div className="p-8 text-center bg-secondary/30 rounded-xl border border-border space-y-2">
+                  <Clock className="w-7 h-7 text-muted-foreground mx-auto" />
+                  <div className="text-xs font-semibold text-foreground">No Service Requests</div>
+                  <p className="text-[11px] text-muted-foreground">
+                    This client has not submitted any service catalog requests yet.
+                  </p>
+                </div>
+              ) : (
+                requests
+                  .filter((r) => r.client_id === requestClientModal.id)
+                  .map((req) => {
+                    const isPaymentReview = req.status === "payment_review";
+                    const isApproved = req.status === "approved";
+
+                    return (
+                      <div
+                        key={req.id}
+                        className="p-4 rounded-xl border border-border bg-secondary/20 space-y-3"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-secondary text-muted-foreground font-semibold">
+                                {req.request_type}
+                              </span>
+                              <span
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider ${
+                                  isPaymentReview
+                                    ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                                    : isApproved
+                                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                    : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                                }`}
+                              >
+                                {req.status.replace("_", " ")}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-bold text-foreground mt-1">{req.title}</h4>
+                            {req.description && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{req.description}</p>
+                            )}
+                          </div>
+
+                          <div className="text-left sm:text-right shrink-0">
+                            <div className="text-[10px] text-muted-foreground uppercase">Amount</div>
+                            <div className="text-base font-bold font-mono text-foreground">
+                              {Number(req.estimated_total).toLocaleString()} {req.currency || "ETB"}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Attached Receipt Section */}
+                        {req.receipt_url && (
+                          <div className="p-3 bg-card rounded-lg border border-border/80 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
+                                <FileCheck2 className="w-3.5 h-3.5 text-purple-500" />
+                                Payment Receipt Attached
+                              </span>
+                              <a
+                                href={req.receipt_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+                              >
+                                View File ↗
+                              </a>
+                            </div>
+
+                            {req.payment_notes && (
+                              <div className="text-xs text-muted-foreground">
+                                <span className="font-semibold text-foreground">Notes: </span>
+                                {req.payment_notes}
+                              </div>
+                            )}
+
+                            {req.payment_submitted_at && (
+                              <div className="text-[10px] text-muted-foreground">
+                                Submitted: {new Date(req.payment_submitted_at).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="pt-2 border-t border-border/60 flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-muted-foreground">
+                            Date: {new Date(req.created_at).toLocaleDateString()}
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            {!isApproved && (
+                              <>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await updateStatus({ id: req.id, status: "declined" });
+                                      toast.success("Request marked as declined.");
+                                    } catch (err: any) {
+                                      toast.error(err.message);
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition"
+                                >
+                                  Decline
+                                </button>
+
+                                <button
+                                  disabled={isApprovingAndLaunching}
+                                  onClick={async () => {
+                                    try {
+                                      await approveAndLaunchProject(req);
+                                      toast.success(
+                                        `Approved! Created Project "${req.title}" in Client's Ongoing stream!`
+                                      );
+                                    } catch (err: any) {
+                                      toast.error(err.message || "Failed to approve and launch project.");
+                                    }
+                                  }}
+                                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow-2xs"
+                                >
+                                  <Zap className="w-3.5 h-3.5" />
+                                  {isApprovingAndLaunching ? "Launching..." : "Approve & Launch Project"}
+                                </button>
+                              </>
+                            )}
+
+                            {isApproved && (
+                              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20 flex items-center gap-1">
+                                ✓ Approved & Live in Ongoing Tab
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-border/80 flex justify-end">
+              <button
+                onClick={() => setRequestClientModal(null)}
+                className="px-4 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-secondary text-foreground transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </motion.div>
         </div>
       )}

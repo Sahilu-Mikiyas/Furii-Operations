@@ -12,6 +12,7 @@ import {
   LogOut,
   X,
   Building2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,19 +31,20 @@ export function ClientSidebar({ isOpen, onClose }: ClientSidebarProps) {
     (a) => a.status === "awaiting_review" || a.status === "pending"
   ).length;
 
-  const isClientOwner = role === "client_owner";
+  const isClientRole = role === "client" || role === "client_owner" || role === "client_member";
 
   const CLIENT_NAV = [
-    { label: "Executive Overview", href: "/portal/overview", icon: LayoutDashboard },
+    { label: "Portal Home", href: "/portal/overview", icon: LayoutDashboard },
+    { label: "Services Hub", href: "/portal/services", icon: Layers },
+    { label: "Solutions Catalog", href: "/portal/catalog", icon: Sparkles },
     {
       label: "Review & Approvals",
       href: "/portal/approvals",
       icon: FileCheck2,
       badgeCount: pendingApprovalsCount,
     },
-    { label: "Active Services", href: "/portal/services", icon: Layers },
     { label: "Brand & Asset Vault", href: "/portal/files", icon: FolderOpen },
-    ...(isClientOwner
+    ...(isClientRole
       ? [{ label: "Financial Statement", href: "/portal/financials", icon: Receipt }]
       : []),
     { label: "Production Timeline", href: "/portal/schedule", icon: Calendar },
