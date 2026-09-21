@@ -33,9 +33,8 @@ export function AgencyLoginPage() {
       const userRole = member?.role;
 
       if (userRole === "client" || userRole === "client_owner" || userRole === "client_member") {
-        await supabase.auth.signOut();
-        toast.error("Client account detected. Please use the Client Portal Login.");
-        navigate("/portal/login");
+        toast.success("Welcome to your Client Workspace.");
+        navigate("/portal/overview");
         return;
       }
 

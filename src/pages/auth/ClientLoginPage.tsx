@@ -33,12 +33,10 @@ export function ClientLoginPage() {
       const userRole = member?.role;
 
       if (userRole === "manager" || userRole === "super_admin" || userRole === "admin" || userRole === "team_member") {
-        await supabase.auth.signOut();
-        toast.error("Internal Agency staff detected. Please sign in via the Agency Login.");
-        navigate("/auth/agency");
+        toast.success("Welcome to Operations Command.");
+        navigate("/admin/dashboard");
         return;
       }
-
 
       toast.success("Welcome to your Client Workspace.");
       navigate("/portal/overview");
