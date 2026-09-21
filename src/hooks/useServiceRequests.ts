@@ -87,6 +87,27 @@ export function useServiceRequests(clientId?: string) {
       file: File;
       notes?: string;
     }) => {
+      // 0. Verify request is still eligible (only pending and no prior receipt allowed)
+      const { data: existingReq, error: fetchError } = await supabase
+        .from("service_requests")
+        .select("status, receipt_url")
+        .eq("id", requestId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      if (existingReq?.status === "approved" || existingReq?.status === "converted") {
+        throw new Error(
+          "This service has already been approved and launched into the ongoing phase. Receipts cannot be submitted again."
+        );
+      }
+
+      if (existingReq?.status === "payment_review" || existingReq?.receipt_url) {
+        throw new Error(
+          "A receipt has already been attached for this service. Receipts can only be submitted once per service."
+        );
+      }
+
       // 1. Upload file to Supabase storage bucket 'receipts'
       const fileExt = file.name.split(".").pop();
       const fileName = `receipt-${requestId}-${Date.now()}.${fileExt}`;

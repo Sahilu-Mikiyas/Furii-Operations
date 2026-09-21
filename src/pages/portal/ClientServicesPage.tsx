@@ -665,8 +665,8 @@ export function ClientServicesPage() {
                               </span>
                             </div>
 
-                            {/* "Pay to Get Project Started" Action Button */}
-                            {(isPending || isApproved) && !isPaymentReview && (
+                            {/* Action / Status Pill */}
+                            {isPending && !req.receipt_url && (
                               <button
                                 onClick={() => navigate(`/portal/payment?requestId=${req.id}`)}
                                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
@@ -676,11 +676,21 @@ export function ClientServicesPage() {
                               </button>
                             )}
 
-                            {isPaymentReview && (
-                              <div className="flex items-center gap-1.5 text-xs text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-3 py-1 rounded-lg border border-purple-200 dark:border-purple-800 font-medium">
+                            {(isPaymentReview || (isPending && !!req.receipt_url)) && (
+                              <div className="flex items-center gap-1.5 text-xs text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-3 py-1.5 rounded-lg border border-purple-200 dark:border-purple-800 font-medium">
                                 <Clock className="w-3.5 h-3.5" />
                                 <span>Receipt Attached — Under Review</span>
                               </div>
+                            )}
+
+                            {isApproved && (
+                              <button
+                                onClick={() => handleTabChange("ongoing")}
+                                className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 transition-colors cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Active Stream — View in Ongoing</span>
+                              </button>
                             )}
                           </div>
                         </div>
