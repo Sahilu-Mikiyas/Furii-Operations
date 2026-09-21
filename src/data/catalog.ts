@@ -119,7 +119,6 @@ export const CURATED_PACKAGES: CuratedPackage[] = [
       { name: "CMS for Property Updates", price: 30000 },
       { name: "Viewing & Consultation Booking", price: 30000 },
       { name: "Advanced Architectural Animations", price: 20000 },
-      { name: "Google Business Portfolio", price: 15000 },
       { name: "Reservation / Online Payment", price: 40000 }
     ]
   },
@@ -511,7 +510,7 @@ export const CONTENT_PRODUCTION: ContentProductionItem[] = [
     price: 45000,
     billingType: "monthly",
     features: [
-      "2 dedicated monthly on-site production shoot sessions",
+      "3–6 days of variant shots on demand / month",
       "16–20 edited high-engagement vertical videos / month (Reels / TikTok / Shorts)",
       "25 color-graded high-resolution photos / month",
       "Monthly content calendar, scriptwriting & viral hooks",
