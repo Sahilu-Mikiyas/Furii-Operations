@@ -28,8 +28,11 @@ import {
   ShieldCheck,
   TrendingUp,
   Loader2,
+  Eye,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import type { Service } from "@/types";
+import { ServiceProgressDetailModal } from "@/components/portal/ServiceProgressDetailModal";
 
 export function ClientServicesPage() {
   const navigate = useNavigate();
@@ -38,6 +41,10 @@ export function ClientServicesPage() {
 
   const { currentClient, currency } = useAuth();
   const clientId = currentClient?.id;
+
+  // Detail Progress Modal State
+  const [detailModalService, setDetailModalService] = useState<Service | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Active Tab: "ongoing" | "completed" | "requested"
   const [activeTab, setActiveTab] = useState<"ongoing" | "completed" | "requested">(
@@ -237,10 +244,10 @@ export function ClientServicesPage() {
                           )}
                         </div>
 
-                        {/* Progress, Payment & Toggle */}
-                        <div className="flex items-center gap-6 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-border/80">
+                        {/* Progress, Payment, Details Action & Toggle */}
+                        <div className="flex flex-wrap items-center gap-4 sm:gap-6 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-border/80">
                           {/* Progress bar */}
-                          <div className="space-y-1 w-32 sm:w-36">
+                          <div className="space-y-1 w-28 sm:w-36">
                             <div className="flex justify-between text-xs">
                               <span className="text-muted-foreground font-medium">Progress</span>
                               <span className="font-mono font-bold text-foreground">{progressVal}%</span>
@@ -263,9 +270,27 @@ export function ClientServicesPage() {
                             )}
                           </div>
 
+                          {/* See More Details About Progress button */}
                           <button
                             type="button"
-                            className="p-1.5 rounded-lg border border-border bg-secondary/40 text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDetailModalService(service);
+                              setSelectedTaskId(null);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer shrink-0"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-primary" />
+                            <span>See More Details About Progress</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExpand(service.id);
+                            }}
+                            className="p-1.5 rounded-lg border border-border bg-secondary/40 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                           >
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
@@ -288,7 +313,17 @@ export function ClientServicesPage() {
                                 <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                                   Sub-Tasks ({completedTasksCount}/{serviceTasks.length} Completed)
                                 </h4>
-                                <span className="text-[11px] text-muted-foreground">Live Status</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDetailModalService(service);
+                                    setSelectedTaskId(null);
+                                  }}
+                                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <span>See Full Progress Breakdown</span>
+                                  <ArrowRight className="w-3 h-3" />
+                                </button>
                               </div>
 
                               {serviceTasks.length === 0 ? (
@@ -300,20 +335,36 @@ export function ClientServicesPage() {
                                     return (
                                       <div
                                         key={task.id}
-                                        className="p-3 rounded-xl bg-card border border-border flex items-center justify-between gap-3 text-xs shadow-2xs"
+                                        onClick={() => {
+                                          setDetailModalService(service);
+                                          setSelectedTaskId(task.id);
+                                        }}
+                                        className="p-3 rounded-xl bg-card border border-border hover:border-primary/50 transition-all flex items-center justify-between gap-3 text-xs shadow-2xs cursor-pointer group"
                                       >
-                                        <div className="space-y-0.5 min-w-0">
-                                          <div className={`font-semibold truncate ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                                        <div className="space-y-0.5 min-w-0 flex-1">
+                                          <div className={`font-semibold truncate group-hover:text-primary transition-colors ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
                                             {task.title}
                                           </div>
-                                          {task.due_date && (
-                                            <div className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
-                                              <Calendar className="w-2.5 h-2.5" />
-                                              Target: {formatDate(task.due_date)}
-                                            </div>
-                                          )}
+                                          <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
+                                            {task.due_date && (
+                                              <span className="flex items-center gap-1">
+                                                <Calendar className="w-2.5 h-2.5" />
+                                                Target: {formatDate(task.due_date)}
+                                              </span>
+                                            )}
+                                            {task.priority && (
+                                              <span className="uppercase text-[9px] font-bold px-1.5 py-0.2 rounded bg-secondary">
+                                                {task.priority}
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
-                                        <StatusBadge status={task.status} />
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          <StatusBadge status={task.status} />
+                                          <span className="text-[11px] font-semibold text-primary group-hover:translate-x-0.5 transition-transform flex items-center">
+                                            Details →
+                                          </span>
+                                        </div>
                                       </div>
                                     );
                                   })}
@@ -431,7 +482,18 @@ export function ClientServicesPage() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDetailModalService(service);
+                              setSelectedTaskId(null);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-primary" />
+                            <span>See More Details About Progress</span>
+                          </button>
                           <StatusBadge status="completed" />
                         </div>
                       </div>
@@ -631,6 +693,18 @@ export function ClientServicesPage() {
           )}
         </>
       )}
+
+      {/* Comprehensive Service & Sub-Tasks Progress Detail Modal */}
+      <ServiceProgressDetailModal
+        service={detailModalService}
+        isOpen={!!detailModalService}
+        onClose={() => {
+          setDetailModalService(null);
+          setSelectedTaskId(null);
+        }}
+        initialTaskId={selectedTaskId}
+        currency={currency}
+      />
     </motion.div>
   );
 }
