@@ -1,36 +1,199 @@
-import { Navigate } from "react-router-dom";
+import { useState, useMemo } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useInvoices } from "@/hooks/useInvoices";
+import { useServiceRequests } from "@/hooks/useServiceRequests";
+import { useProjects } from "@/hooks/useProjects";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { ShieldCheck, Loader2 } from "lucide-react";
+import {
+  ShieldCheck,
+  Loader2,
+  Receipt,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  ExternalLink,
+  ArrowRight,
+  TrendingUp,
+  Layers,
+  DollarSign,
+  Plus,
+} from "lucide-react";
 import { motion } from "framer-motion";
 
 export function ClientFinancialsPage() {
+  const navigate = useNavigate();
   const { currentClient, currency, setCurrency, role } = useAuth();
 
-  // Strict role guard: only client (or client_owner) can view financials
-  if (role !== "client" && role !== "client_owner") {
+  // Strict role guard: only client roles can view financials
+  const isClientRole =
+    role === "client" || role === "client_owner" || role === "client_member";
+
+  if (!isClientRole) {
     return <Navigate to="/portal/overview" replace />;
   }
 
+  const clientId = currentClient?.id;
 
-  const { invoices, isLoading } = useInvoices(currentClient?.id);
+  // Real data queries
+  const { invoices, isLoading: invoicesLoading } = useInvoices(clientId);
+  const { requests, isLoading: requestsLoading } = useServiceRequests(clientId);
+  const { projects, isLoading: projectsLoading } = useProjects(clientId);
 
-  const totalPaid = invoices
-    .filter((i) => i.status === "paid")
-    .reduce((acc, i) => acc + Number(i.total || i.amount || 0), 0);
+  const [filter, setFilter] = useState<"all" | "paid" | "outstanding">("all");
 
-  const totalBalance = invoices
-    .filter((i) => i.status === "sent" || i.status === "partially_paid")
-    .reduce(
-      (acc, i) =>
-        acc + (Number(i.total || i.amount || 0) - Number(i.amount_paid || 0)),
-      0
-    );
+  const isLoading = invoicesLoading || requestsLoading || projectsLoading;
 
-  const totalContract = totalPaid + totalBalance;
+  // Exchange rate helper: 1 USD ≈ 145 ETB standard benchmark
+  const ETB_TO_USD_BENCHMARK = 145;
+  const toDisplayAmount = (amountInETB: number) => {
+    if (currency === "USD") {
+      return Math.round((amountInETB / ETB_TO_USD_BENCHMARK) * 100) / 100;
+    }
+    return amountInETB;
+  };
+
+  // Financial calculations
+  const { paidItems, outstandingItems, totalPaid, totalOutstanding, totalCommitment } =
+    useMemo(() => {
+      const paid: Array<{
+        id: string;
+        title: string;
+        type: string;
+        date: string;
+        amount: number;
+        status: "paid";
+        receipt_url?: string | null;
+        isProject?: boolean;
+      }> = [];
+
+      const outstanding: Array<{
+        id: string;
+        title: string;
+        type: string;
+        date: string;
+        amount: number;
+        status: "payment_review" | "pending";
+        receipt_url?: string | null;
+        requestId: string;
+      }> = [];
+
+      // 1. Process Approved & Converted Service Requests
+      // (When user attached receipt and was approved, it is PAID)
+      const approvedRequests = requests.filter(
+        (r) => r.status === "approved" || r.status === "converted"
+      );
+
+      approvedRequests.forEach((req) => {
+        paid.push({
+          id: `req-${req.id}`,
+          title: req.title,
+          type: req.request_type ? `${req.request_type.toUpperCase()} PACKAGE` : "APPROVED SERVICE",
+          date: req.updated_at || req.created_at,
+          amount: Number(req.estimated_total) || 0,
+          status: "paid",
+          receipt_url: req.receipt_url,
+        });
+      });
+
+      // 2. Process Active/Completed Projects with Budget
+      // (Covers active services already launched for the client without double-counting identical request titles)
+      const activeProjects = projects.filter((p) => p.budget && p.budget > 0);
+
+      activeProjects.forEach((proj) => {
+        const matchesApproved = approvedRequests.some(
+          (r) => r.title.toLowerCase().trim() === proj.name.toLowerCase().trim()
+        );
+        if (!matchesApproved && proj.budget) {
+          paid.push({
+            id: `proj-${proj.id}`,
+            title: proj.name,
+            type: "ACTIVE SERVICE STREAM",
+            date: proj.start_date || proj.created_at,
+            amount: Number(proj.budget),
+            status: "paid",
+            isProject: true,
+          });
+        }
+      });
+
+      // 3. Process Formal Invoices (Paid)
+      invoices.forEach((inv) => {
+        if (inv.status === "paid" || (inv.amount_paid && inv.amount_paid > 0)) {
+          const amt = Number(inv.amount_paid || inv.total || 0);
+          paid.push({
+            id: `inv-${inv.id}`,
+            title: inv.title || `Invoice ${inv.invoice_number}`,
+            type: `INVOICE ${inv.invoice_number}`,
+            date: inv.created_at,
+            amount: amt,
+            status: "paid",
+          });
+        }
+      });
+
+      // 4. Process Pending & Under-Review Service Requests
+      // (When client requests a service and it's not approved yet, it is OUTSTANDING)
+      const pendingRequests = requests.filter(
+        (r) => r.status === "pending" || r.status === "payment_review"
+      );
+
+      pendingRequests.forEach((req) => {
+        outstanding.push({
+          id: `pending-${req.id}`,
+          title: req.title,
+          type: req.request_type ? `${req.request_type.toUpperCase()} REQUIREMENT` : "SERVICE REQUIREMENT",
+          date: req.created_at,
+          amount: Number(req.estimated_total) || 0,
+          status: req.status === "payment_review" ? "payment_review" : "pending",
+          receipt_url: req.receipt_url,
+          requestId: req.id,
+        });
+      });
+
+      // 5. Process Formal Invoices (Unpaid Balances)
+      invoices.forEach((inv) => {
+        if (inv.status !== "paid" && inv.status !== "cancelled") {
+          const remaining = Number(inv.total || 0) - Number(inv.amount_paid || 0);
+          if (remaining > 0) {
+            outstanding.push({
+              id: `unpaid-inv-${inv.id}`,
+              title: inv.title || `Invoice ${inv.invoice_number}`,
+              type: `UNPAID INVOICE ${inv.invoice_number}`,
+              date: inv.due_date || inv.created_at,
+              amount: remaining,
+              status: "pending",
+              requestId: inv.id,
+            });
+          }
+        }
+      });
+
+      const totalPaidSum = paid.reduce((acc, item) => acc + item.amount, 0);
+      const totalOutstandingSum = outstanding.reduce((acc, item) => acc + item.amount, 0);
+      const totalCommitmentSum = totalPaidSum + totalOutstandingSum;
+
+      return {
+        paidItems: paid,
+        outstandingItems: outstanding,
+        totalPaid: totalPaidSum,
+        totalOutstanding: totalOutstandingSum,
+        totalCommitment: totalCommitmentSum,
+      };
+    }, [requests, projects, invoices]);
+
+  // Combined ledger items sorted newest first
+  const allLedgerItems = useMemo(() => {
+    const combined = [...paidItems, ...outstandingItems];
+    return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [paidItems, outstandingItems]);
+
+  const filteredItems = useMemo(() => {
+    if (filter === "paid") return paidItems;
+    if (filter === "outstanding") return outstandingItems;
+    return allLedgerItems;
+  }, [filter, paidItems, outstandingItems, allLedgerItems]);
 
   return (
     <motion.div
@@ -43,12 +206,12 @@ export function ClientFinancialsPage() {
         title="Financial Statement & Invoicing"
         description="Formal accounting of project invoices, milestone deposits, and remaining balances."
         actions={
-          <div className="flex items-center gap-2 bg-card p-1 rounded-xl border border-border shadow-2xs">
+          <div className="flex items-center gap-1 bg-secondary/50 p-1 rounded-xl border border-border shadow-2xs">
             <button
               onClick={() => setCurrency("ETB")}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                 currency === "ETB"
-                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  ? "bg-card text-foreground shadow-2xs"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -58,7 +221,7 @@ export function ClientFinancialsPage() {
               onClick={() => setCurrency("USD")}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                 currency === "USD"
-                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  ? "bg-card text-foreground shadow-2xs"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -70,77 +233,197 @@ export function ClientFinancialsPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Total Retainer Commitment */}
         <div className="p-5 rounded-2xl bg-card border border-border shadow-2xs space-y-2">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase font-mono">
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase font-mono tracking-wider">
             Total Retainer Commitment
           </span>
-          <p className="text-2xl font-bold font-mono text-foreground">
-            {formatCurrency(totalContract, currency)}
+          <p className="text-2xl sm:text-3xl font-bold font-mono text-foreground">
+            {formatCurrency(toDisplayAmount(totalCommitment), currency)}
           </p>
-          <span className="text-[11px] text-muted-foreground">Combined Active Milestones</span>
+          <span className="text-[11px] text-muted-foreground block">
+            Combined Active & Requested Streams
+          </span>
         </div>
 
-        <div className="p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200 shadow-2xs space-y-2">
-          <span className="text-[10px] font-semibold text-emerald-800 uppercase font-mono">
+        {/* Paid to Date */}
+        <div className="p-5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 shadow-2xs space-y-2">
+          <span className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-400 uppercase font-mono tracking-wider">
             Paid to Date
           </span>
-          <p className="text-2xl font-bold font-mono text-emerald-950">
-            {formatCurrency(totalPaid, currency)}
+          <p className="text-2xl sm:text-3xl font-bold font-mono text-emerald-950 dark:text-emerald-300">
+            {formatCurrency(toDisplayAmount(totalPaid), currency)}
           </p>
-          <span className="text-[11px] text-emerald-700">Verified Wire / Deposits</span>
+          <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block">
+            Verified Wire / Approved Receipts
+          </span>
         </div>
 
-        <div className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200 shadow-2xs space-y-2">
-          <span className="text-[10px] font-semibold text-amber-800 uppercase font-mono">
+        {/* Remaining Balance / Outstanding */}
+        <div className="p-5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 shadow-2xs space-y-2">
+          <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-400 uppercase font-mono tracking-wider">
             Remaining Balance
           </span>
-          <p className="text-2xl font-bold font-mono text-amber-950">
-            {formatCurrency(totalBalance, currency)}
+          <p className="text-2xl sm:text-3xl font-bold font-mono text-amber-950 dark:text-amber-300">
+            {formatCurrency(toDisplayAmount(totalOutstanding), currency)}
           </p>
-          <span className="text-[11px] text-amber-700">Due upon Final Sign-Off</span>
+          <span className="text-[11px] text-amber-700 dark:text-amber-400 block">
+            {totalOutstanding > 0 ? "Pending Clearance & Verification" : "All Services Cleared"}
+          </span>
         </div>
       </div>
 
-      {/* Invoices List */}
-      <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
-        <h2 className="text-base font-bold text-foreground">Issued Invoices</h2>
+      {/* Ledger & Invoices Section */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/80 pb-4">
+          <div className="space-y-0.5">
+            <h2 className="text-base font-bold text-foreground">
+              Issued Invoices & Services Statements
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Formal accounting ledger of all approved service streams, verified receipts, and pending requirements.
+            </p>
+          </div>
+
+          {/* Filter Tabs */}
+          <div className="flex items-center gap-1 bg-secondary/50 p-1 rounded-xl border border-border text-xs w-fit">
+            <button
+              onClick={() => setFilter("all")}
+              className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                filter === "all"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All ({allLedgerItems.length})
+            </button>
+            <button
+              onClick={() => setFilter("paid")}
+              className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                filter === "paid"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Paid & Verified ({paidItems.length})
+            </button>
+            <button
+              onClick={() => setFilter("outstanding")}
+              className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                filter === "outstanding"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Outstanding ({outstandingItems.length})
+            </button>
+          </div>
+        </div>
 
         {isLoading ? (
-          <div className="p-8 flex justify-center text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin" />
+          <div className="p-12 flex justify-center text-muted-foreground">
+            <Loader2 className="w-6 h-6 animate-spin" />
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="p-12 text-center bg-secondary/20 rounded-xl border border-border space-y-3">
+            <Receipt className="w-8 h-8 text-muted-foreground mx-auto" />
+            <h3 className="text-sm font-bold text-foreground">No Financial Statements Recorded</h3>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              When you commission packages or request services from the catalog, formal invoices and cleared receipts will appear here.
+            </p>
+            <button
+              onClick={() => navigate("/portal/catalog")}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer mt-1"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Browse Catalog
+            </button>
           </div>
         ) : (
-          <div className="divide-y divide-border/60">
-            {invoices.map((inv) => {
-              const amount = Number(inv.total || inv.amount || 0);
+          <div className="space-y-2.5">
+            {filteredItems.map((item) => {
+              const isPaid = item.status === "paid";
+              const isReview = item.status === "payment_review";
+              const isPending = item.status === "pending";
 
               return (
                 <div
-                  key={inv.id}
-                  className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  key={item.id}
+                  className="p-4 rounded-xl bg-card border border-border hover:border-border/80 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-bold text-foreground">
-                        {inv.invoice_number}
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-secondary text-muted-foreground font-semibold border border-border/70">
+                        {item.type}
                       </span>
-                      <StatusBadge status={inv.status} />
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                          isPaid
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                            : isReview
+                            ? "bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200 dark:border-purple-800"
+                            : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                        }`}
+                      >
+                        {isPaid
+                          ? "Paid & Cleared"
+                          : isReview
+                          ? "Receipt Under Review"
+                          : "Awaiting Payment Clearance"}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground font-mono">
+                        {formatDate(item.date)}
+                      </span>
                     </div>
-                    <p className="text-xs font-medium text-foreground">{inv.title}</p>
-                    <p className="text-[11px] text-muted-foreground font-mono">
-                      Due: {formatDate(inv.due_date)}
-                    </p>
+
+                    <h4 className="text-sm font-bold text-foreground truncate">{item.title}</h4>
                   </div>
 
-                  <div className="text-right">
-                    <p className="text-sm font-bold font-mono text-foreground">
-                      {formatCurrency(amount, currency)}
-                    </p>
-                    {inv.amount_paid > 0 && inv.status !== "paid" && (
-                      <span className="text-[10px] text-emerald-600 font-mono">
-                        Paid: {formatCurrency(inv.amount_paid, currency)}
+                  <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/70">
+                    <div className="text-left sm:text-right">
+                      <span className="text-[10px] uppercase font-mono text-muted-foreground block">
+                        {isPaid ? "Settled Amount" : "Outstanding Balance"}
                       </span>
-                    )}
+                      <span className="text-base font-bold font-mono text-foreground">
+                        {formatCurrency(toDisplayAmount(item.amount), currency)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {item.receipt_url && (
+                        <a
+                          href={item.receipt_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>Receipt</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+
+                      {isPending && (
+                        <button
+                          onClick={() =>
+                            navigate(`/portal/payment?requestId=${(item as any).requestId}`)
+                          }
+                          className="px-3 py-1 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
+                        >
+                          <Receipt className="w-3 h-3" />
+                          <span>Pay Now</span>
+                        </button>
+                      )}
+
+                      {isPaid && (
+                        <button
+                          onClick={() => navigate("/portal/services?tab=ongoing")}
+                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <span>View Service</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -151,3 +434,4 @@ export function ClientFinancialsPage() {
     </motion.div>
   );
 }
+export default ClientFinancialsPage;
