@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { Download, CheckCircle2, Layers, Receipt, Printer, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { FuriiLogo } from "@/components/shared/FuriiLogo";
 
 export function ReportsPage() {
   const { role, currentClient, currency } = useAuth();
@@ -83,7 +84,7 @@ export function ReportsPage() {
         <div className="border-b border-border pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <img src="/brand/furii-logo-horizontal.jpg" alt="Furii" className="h-6 w-auto object-contain" />
+              <FuriiLogo className="h-6" />
               <span className="text-muted-foreground">•</span>
               <span className="text-[10px] font-mono uppercase tracking-widest text-primary font-bold">
                 Operations Debrief

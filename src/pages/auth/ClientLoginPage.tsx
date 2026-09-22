@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { ShieldCheck, ArrowRight, Lock, Building, Loader2 } from "lucide-react";
+import { FuriiLogo } from "@/components/shared/FuriiLogo";
 
 export function ClientLoginPage() {
   const navigate = useNavigate();
@@ -55,10 +56,8 @@ export function ClientLoginPage() {
           Private Client Operations Portal
         </div>
 
-        <img
-          src="/brand/furii-logo-horizontal.jpg"
-          alt="Furii"
-          className="h-9 w-auto mx-auto object-contain my-2"
+        <FuriiLogo
+          className="h-9 mx-auto my-2"
         />
 
         <h1 className="text-2xl font-bold tracking-tight text-foreground">

@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FuriiLogo } from "@/components/shared/FuriiLogo";
 
 interface AdminSidebarProps {
   isOpen?: boolean;
@@ -60,11 +61,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         {/* Brand Header */}
         <div className="h-16 border-b border-border/80 px-6 flex items-center justify-between">
           <Link to="/admin/dashboard" className="flex items-center gap-2.5">
-            <img
-              src="/brand/furii-logo-horizontal.jpg"
-              alt="Furii"
-              className="h-7 w-auto object-contain"
-            />
+            <FuriiLogo className="h-7" />
           </Link>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground font-semibold border border-border">

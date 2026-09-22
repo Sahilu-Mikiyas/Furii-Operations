@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { FuriiLogo } from "@/components/shared/FuriiLogo";
 
 export function AuthPage() {
   const navigate = useNavigate();
@@ -47,10 +48,9 @@ export function AuthPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center space-y-3">
-        <img
-          src="/brand/furii-logo-stacked.jpg"
-          alt="Furii"
-          className="h-16 w-auto mx-auto object-contain"
+        <FuriiLogo
+          variant="stacked"
+          className="h-16 mx-auto"
         />
         <h2 className="text-xl font-bold tracking-tight text-foreground">
           {isSignUp ? "Create Furii Account" : "Client Operations Portal"}

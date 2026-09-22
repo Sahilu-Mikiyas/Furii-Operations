@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { Shield, ArrowRight, Lock, Mail, Loader2 } from "lucide-react";
+import { FuriiLogo } from "@/components/shared/FuriiLogo";
 
 export function AgencyLoginPage() {
   const navigate = useNavigate();
@@ -59,10 +60,9 @@ export function AgencyLoginPage() {
           Agency Command Auth
         </div>
 
-        <img
-          src="/brand/furii-logo-horizontal.jpg"
-          alt="Furii"
-          className="h-9 w-auto mx-auto object-contain my-3 invert brightness-200"
+        <FuriiLogo
+          theme="dark"
+          className="h-9 mx-auto my-3"
         />
 
         <h1 className="text-xl font-bold tracking-tight text-white">

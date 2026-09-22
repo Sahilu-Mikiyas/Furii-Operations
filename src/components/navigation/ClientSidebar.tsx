@@ -12,9 +12,9 @@ import {
   LogOut,
   X,
   Building2,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FuriiLogo } from "@/components/shared/FuriiLogo";
 
 interface ClientSidebarProps {
   isOpen?: boolean;
@@ -70,11 +70,7 @@ export function ClientSidebar({ isOpen, onClose }: ClientSidebarProps) {
         {/* Brand Header */}
         <div className="h-16 border-b border-border/80 px-6 flex items-center justify-between">
           <Link to="/portal/overview" className="flex items-center gap-2">
-            <img
-              src="/brand/furii-logo-horizontal.jpg"
-              alt="Furii"
-              className="h-7 w-auto object-contain"
-            />
+            <FuriiLogo className="h-7" />
           </Link>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">

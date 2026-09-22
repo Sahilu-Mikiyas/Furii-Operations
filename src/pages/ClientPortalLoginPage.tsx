@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { ShieldCheck, ArrowRight, Lock, Building } from "lucide-react";
+import { FuriiLogo } from "@/components/shared/FuriiLogo";
 
 export function ClientPortalLoginPage() {
   const navigate = useNavigate();
@@ -48,10 +49,8 @@ export function ClientPortalLoginPage() {
           Private Client Operations Portal
         </div>
 
-        <img
-          src="/brand/furii-logo-horizontal.jpg"
-          alt="Furii"
-          className="h-10 w-auto mx-auto object-contain my-2"
+        <FuriiLogo
+          className="h-10 mx-auto my-2"
         />
 
         <h2 className="text-xl font-bold tracking-tight text-foreground">
