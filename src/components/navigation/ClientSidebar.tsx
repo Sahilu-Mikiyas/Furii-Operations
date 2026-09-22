@@ -12,6 +12,7 @@ import {
   LogOut,
   X,
   Building2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FuriiLogo } from "@/components/shared/FuriiLogo";
