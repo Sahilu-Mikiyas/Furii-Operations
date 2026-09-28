@@ -19,6 +19,7 @@ import {
   FileText,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   ArrowRight,
   Check,
   Search,
