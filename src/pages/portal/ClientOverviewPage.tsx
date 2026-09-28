@@ -7,6 +7,7 @@ import { useInvoices } from "@/hooks/useInvoices";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
+import { CircularProgress } from "@/components/shared/CircularProgress";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Sparkles,
@@ -148,8 +149,17 @@ export function ClientOverviewPage() {
                 </p>
               </div>
 
-              <div className="space-y-1 pt-2 border-t border-border/60">
-                <ProgressBar value={srv.progress} label="Phase Completion" />
+              <div className="pt-2.5 border-t border-border/60 flex items-center justify-between">
+                <CircularProgress
+                  value={srv.progress}
+                  size={36}
+                  strokeWidth={3.5}
+                  label="Phase Progress"
+                  sublabel={srv.current_phase || (srv.progress === 100 ? "Completed" : "Active")}
+                />
+                <span className="text-[11px] font-semibold text-primary group-hover:translate-x-0.5 transition-transform flex items-center gap-1 shrink-0">
+                  Track →
+                </span>
               </div>
             </Link>
           ))}

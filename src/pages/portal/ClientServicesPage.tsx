@@ -11,6 +11,7 @@ import { useServiceRequests } from "@/hooks/useServiceRequests";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
+import { CircularProgress } from "@/components/shared/CircularProgress";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Layers,
@@ -217,9 +218,10 @@ export function ClientServicesPage() {
                       {/* Collapsed Header */}
                       <div
                         onClick={() => toggleExpand(service.id)}
-                        className="p-5 sm:p-6 cursor-pointer hover:bg-secondary/20 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-5"
+                        className="p-5 sm:p-6 cursor-pointer hover:bg-secondary/20 transition-colors flex flex-col xl:flex-row xl:items-center justify-between gap-4 xl:gap-6"
                       >
-                        <div className="space-y-1.5 flex-1 min-w-0">
+                        {/* Title & Category Info */}
+                        <div className="space-y-2 flex-1 min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
                               {service.service_type}
@@ -233,34 +235,45 @@ export function ClientServicesPage() {
                             )}
                           </div>
 
-                          <h3 className="text-base sm:text-lg font-bold text-foreground leading-snug">
+                          <h3 className="text-base sm:text-lg lg:text-xl font-bold text-foreground leading-snug break-words">
                             {service.name}
                           </h3>
 
                           {service.current_phase && (
-                            <p className="text-xs text-muted-foreground">
-                              Phase: <span className="text-foreground font-medium">{service.current_phase}</span>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                              <span>Phase:</span>
+                              <span className="text-foreground font-semibold px-2 py-0.5 rounded-md bg-secondary border border-border/60">
+                                {service.current_phase}
+                              </span>
                             </p>
                           )}
                         </div>
 
-                        {/* Progress, Payment, Details Action & Toggle */}
-                        <div className="flex flex-wrap items-center gap-4 sm:gap-6 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-border/80">
-                          {/* Progress bar */}
-                          <div className="space-y-1 w-28 sm:w-36">
-                            <div className="flex justify-between text-xs">
-                              <span className="text-muted-foreground font-medium">Progress</span>
-                              <span className="font-mono font-bold text-foreground">{progressVal}%</span>
-                            </div>
-                            <ProgressBar value={progressVal} showValue={false} />
+                        {/* Circular Progress, Payment, Details Action & Toggle */}
+                        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between xl:justify-end gap-4 sm:gap-6 pt-3.5 xl:pt-0 border-t xl:border-t-0 border-border/80 shrink-0">
+                          {/* Circular Progress Gauge */}
+                          <div className="shrink-0">
+                            <CircularProgress
+                              value={progressVal}
+                              size={50}
+                              strokeWidth={4.5}
+                              label="Progress"
+                              sublabel={
+                                serviceTasks.length > 0
+                                  ? `${completedTasksCount}/${serviceTasks.length} Tasks`
+                                  : progressVal === 100
+                                  ? "Completed"
+                                  : "Active Stream"
+                              }
+                            />
                           </div>
 
                           {/* Payment status */}
-                          <div className="text-left sm:text-right min-w-24">
-                            <span className="text-[10px] uppercase font-mono text-muted-foreground block">
+                          <div className="text-left sm:text-right min-w-[85px] shrink-0">
+                            <span className="text-[10px] uppercase font-mono text-muted-foreground font-semibold block">
                               Paid to Date
                             </span>
-                            <span className="text-xs font-bold font-mono text-foreground">
+                            <span className="text-xs sm:text-sm font-bold font-mono text-foreground block">
                               {formatCurrency(totalPaid, currency)}
                             </span>
                             {totalBilled > 0 && (
@@ -270,30 +283,34 @@ export function ClientServicesPage() {
                             )}
                           </div>
 
-                          {/* See More Details About Progress button */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDetailModalService(service);
-                              setSelectedTaskId(null);
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer shrink-0"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-primary" />
-                            <span>See More Details About Progress</span>
-                          </button>
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDetailModalService(service);
+                                setSelectedTaskId(null);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border shadow-2xs hover:border-primary/40 transition-all cursor-pointer shrink-0"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-primary" />
+                              <span className="hidden sm:inline">See More Details</span>
+                              <span className="sm:hidden">Details</span>
+                            </button>
 
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleExpand(service.id);
-                            }}
-                            className="p-1.5 rounded-lg border border-border bg-secondary/40 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                          >
-                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleExpand(service.id);
+                              }}
+                              className="p-2 rounded-xl border border-border bg-secondary/40 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer shrink-0"
+                              aria-label="Toggle details"
+                            >
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -482,17 +499,26 @@ export function ClientServicesPage() {
                           )}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                        <div className="flex flex-wrap items-center gap-3 shrink-0">
+                          <CircularProgress
+                            value={100}
+                            size={44}
+                            strokeWidth={4}
+                            variant="emerald"
+                            label="Milestones"
+                            sublabel="100% Done"
+                            className="hidden sm:inline-flex"
+                          />
                           <button
                             type="button"
                             onClick={() => {
                               setDetailModalService(service);
                               setSelectedTaskId(null);
                             }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer"
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border shadow-2xs hover:border-primary/40 transition-all cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5 text-primary" />
-                            <span>See More Details About Progress</span>
+                            <span>See More Details</span>
                           </button>
                           <StatusBadge status="completed" />
                         </div>
