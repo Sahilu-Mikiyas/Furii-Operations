@@ -17,6 +17,7 @@ import { ClientLoginPage } from "@/pages/auth/ClientLoginPage";
 // Admin Pages
 import { DashboardPage } from "@/pages/DashboardPage";
 import { ClientsPage } from "@/pages/ClientsPage";
+import { AdminRequestsPage } from "@/pages/admin/AdminRequestsPage";
 import { ProjectsPage } from "@/pages/ProjectsPage";
 import { TasksPage } from "@/pages/TasksPage";
 import { ApprovalsPage } from "@/pages/ApprovalsPage";
@@ -75,6 +76,14 @@ function AppRoutes() {
         element={
           <AdminGuard>
             <ClientsPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/requests"
+        element={
+          <AdminGuard>
+            <AdminRequestsPage />
           </AdminGuard>
         }
       />

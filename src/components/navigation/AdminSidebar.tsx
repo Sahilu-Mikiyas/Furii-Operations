@@ -15,6 +15,7 @@ import {
   LogOut,
   X,
   PanelLeftClose,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FuriiLogo } from "@/components/shared/FuriiLogo";
@@ -29,6 +30,7 @@ interface AdminSidebarProps {
 const ADMIN_NAV = [
   { label: "Command Hub", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Clients Directory", href: "/admin/clients", icon: Users },
+  { label: "Client Applications", href: "/admin/requests", icon: Sparkles },
   { label: "Service Streams", href: "/admin/projects", icon: Briefcase },
   { label: "Task Matrix", href: "/admin/tasks", icon: CheckSquare },
   { label: "Review Queue", href: "/admin/approvals", icon: FileCheck2 },

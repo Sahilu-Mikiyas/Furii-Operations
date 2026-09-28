@@ -22,9 +22,10 @@ import {
   KeyRound,
   Archive,
   Receipt,
-  Clock,
   FileCheck2,
   Zap,
+  AlertTriangle,
+  Clock,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useServiceRequests } from "@/hooks/useServiceRequests";
@@ -71,9 +72,42 @@ export function ClientsPage() {
   const [provPassword, setProvPassword] = useState("");
   const [provName, setProvName] = useState("");
 
-  // Service Requests Modal State
-  const { requests, approveAndLaunchProject, isApprovingAndLaunching, updateStatus } = useServiceRequests();
+  // Service Requests Modal & Admin Powers State
+  const {
+    requests,
+    approveAndLaunchProject,
+    isApprovingAndLaunching,
+    updateStatus,
+    createRequestAsAdmin,
+    isCreatingAsAdmin,
+    editRequest,
+    isEditingRequest,
+    deleteRequest,
+    isDeletingRequest,
+    wipeClientRequests,
+    isWipingClientRequests,
+  } = useServiceRequests();
   const [requestClientModal, setRequestClientModal] = useState<any | null>(null);
+
+  // Admin Request Creation within client modal
+  const [showAddReqModal, setShowAddReqModal] = useState(false);
+  const [addReqTitle, setAddReqTitle] = useState("");
+  const [addReqDesc, setAddReqDesc] = useState("");
+  const [addReqAmount, setAddReqAmount] = useState<number>(75000);
+  const [addReqType, setAddReqType] = useState<any>("package");
+  const [addReqStatus, setAddReqStatus] = useState<any>("pending");
+  const [addReqAutoLaunch, setAddReqAutoLaunch] = useState(false);
+
+  // Admin Request Editing
+  const [editingRequest, setEditingRequest] = useState<any | null>(null);
+  const [editReqTitle, setEditReqTitle] = useState("");
+  const [editReqDesc, setEditReqDesc] = useState("");
+  const [editReqAmount, setEditReqAmount] = useState<number>(0);
+  const [editReqStatus, setEditReqStatus] = useState<any>("pending");
+
+  // Wipe History Confirmation
+  const [confirmWipeModal, setConfirmWipeModal] = useState(false);
+  const [confirmDeleteReqId, setConfirmDeleteReqId] = useState<string | null>(null);
 
 
   // Restrict client roles from seeing all agency clients
@@ -609,41 +643,85 @@ export function ClientsPage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-card w-full max-w-2xl rounded-2xl border border-border shadow-2xl p-6 space-y-5 max-h-[85vh] flex flex-col"
+            className="bg-card w-full max-w-2xl rounded-2xl border border-border shadow-2xl p-6 space-y-4 max-h-[88vh] flex flex-col"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-4">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/80 pb-4 shrink-0">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20">
                     <Receipt className="w-4 h-4" />
                   </div>
                   <h2 className="text-base font-bold text-foreground">
-                    Service Requests & Receipts
+                    Service Requests & Applications
                   </h2>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Review requirements and attached payment slips for{" "}
-                  <span className="font-semibold text-foreground">{requestClientModal.name}</span>.
+                  Client: <span className="font-semibold text-foreground">{requestClientModal.name}</span>
                 </p>
               </div>
 
-              <button
-                onClick={() => setRequestClientModal(null)}
-                className="text-muted-foreground hover:text-foreground text-sm font-bold p-1 cursor-pointer"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                {requests.filter((r) => r.client_id === requestClientModal.id).length > 0 && (
+                  <button
+                    onClick={() => setConfirmWipeModal(true)}
+                    className="px-2.5 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                    title="Wipe out all application records for this client"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Wipe History
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    setAddReqTitle("");
+                    setAddReqDesc("");
+                    setAddReqAmount(75000);
+                    setAddReqType("package");
+                    setAddReqStatus("pending");
+                    setAddReqAutoLaunch(false);
+                    setShowAddReqModal(true);
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  + Create Request
+                </button>
+
+                <button
+                  onClick={() => setRequestClientModal(null)}
+                  className="text-muted-foreground hover:text-foreground text-sm font-bold p-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Requests List */}
             <div className="overflow-y-auto space-y-4 pr-1 flex-1">
               {requests.filter((r) => r.client_id === requestClientModal.id).length === 0 ? (
                 <div className="p-8 text-center bg-secondary/30 rounded-xl border border-border space-y-2">
-                  <Clock className="w-7 h-7 text-muted-foreground mx-auto" />
+                  <Receipt className="w-8 h-8 text-muted-foreground mx-auto opacity-50" />
                   <div className="text-xs font-semibold text-foreground">No Service Requests</div>
                   <p className="text-[11px] text-muted-foreground">
-                    This client has not submitted any service catalog requests yet.
+                    This client has no active or pending service catalog requests.
                   </p>
+                  <button
+                    onClick={() => {
+                      setAddReqTitle("");
+                      setAddReqDesc("");
+                      setAddReqAmount(75000);
+                      setAddReqType("package");
+                      setAddReqStatus("pending");
+                      setAddReqAutoLaunch(false);
+                      setShowAddReqModal(true);
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition inline-flex items-center gap-1.5 cursor-pointer mt-2"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Create First Request
+                  </button>
                 </div>
               ) : (
                 requests
@@ -651,14 +729,15 @@ export function ClientsPage() {
                   .map((req) => {
                     const isPaymentReview = req.status === "payment_review";
                     const isApproved = req.status === "approved";
+                    const isDeclined = req.status === "declined";
 
                     return (
                       <div
                         key={req.id}
-                        className="p-4 rounded-xl border border-border bg-secondary/20 space-y-3"
+                        className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-3"
                       >
                         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                          <div>
+                          <div className="space-y-1">
                             <div className="flex items-center gap-2">
                               <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-secondary text-muted-foreground font-semibold">
                                 {req.request_type}
@@ -669,15 +748,17 @@ export function ClientsPage() {
                                     ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
                                     : isApproved
                                     ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                    : isDeclined
+                                    ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
                                     : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
                                 }`}
                               >
                                 {req.status.replace("_", " ")}
                               </span>
                             </div>
-                            <h4 className="text-sm font-bold text-foreground mt-1">{req.title}</h4>
+                            <h4 className="text-sm font-bold text-foreground">{req.title}</h4>
                             {req.description && (
-                              <p className="text-xs text-muted-foreground mt-0.5">{req.description}</p>
+                              <p className="text-xs text-muted-foreground leading-relaxed">{req.description}</p>
                             )}
                           </div>
 
@@ -691,7 +772,7 @@ export function ClientsPage() {
 
                         {/* Attached Receipt Section */}
                         {req.receipt_url && (
-                          <div className="p-3 bg-card rounded-lg border border-border/80 space-y-1.5">
+                          <div className="p-3 bg-secondary/30 rounded-lg border border-border/80 space-y-1.5">
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
                                 <FileCheck2 className="w-3.5 h-3.5 text-purple-500" />
@@ -722,13 +803,57 @@ export function ClientsPage() {
                           </div>
                         )}
 
-                        {/* Action Buttons */}
-                        <div className="pt-2 border-t border-border/60 flex items-center justify-between gap-2">
-                          <span className="text-[10px] text-muted-foreground">
-                            Date: {new Date(req.created_at).toLocaleDateString()}
-                          </span>
+                        {/* Action Buttons Toolbar */}
+                        <div className="pt-2 border-t border-border/60 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-muted-foreground">Status:</span>
+                            <select
+                              value={req.status}
+                              onChange={async (e) => {
+                                try {
+                                  await updateStatus({
+                                    id: req.id,
+                                    status: e.target.value as any,
+                                  });
+                                  toast.success(`Updated status to ${e.target.value.replace("_", " ")}.`);
+                                } catch (err: any) {
+                                  toast.error(err.message);
+                                }
+                              }}
+                              className="px-2 py-0.5 text-[11px] bg-secondary border border-border rounded text-foreground font-medium"
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="payment_review">Payment Review</option>
+                              <option value="approved">Approved</option>
+                              <option value="declined">Declined</option>
+                            </select>
+                          </div>
 
                           <div className="flex items-center gap-2">
+                            {/* Edit Single */}
+                            <button
+                              onClick={() => {
+                                setEditingRequest(req);
+                                setEditReqTitle(req.title);
+                                setEditReqDesc(req.description || "");
+                                setEditReqAmount(Number(req.estimated_total || 0));
+                                setEditReqStatus(req.status);
+                              }}
+                              className="p-1 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary cursor-pointer"
+                              title="Edit Request"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Delete Single */}
+                            <button
+                              onClick={() => setConfirmDeleteReqId(req.id)}
+                              className="p-1 rounded-md border border-rose-500/20 text-rose-500 hover:bg-rose-500/10 cursor-pointer"
+                              title="Delete This Request"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+
                             {!isApproved && (
                               <>
                                 <button
@@ -757,17 +882,17 @@ export function ClientsPage() {
                                       toast.error(err.message || "Failed to approve and launch project.");
                                     }
                                   }}
-                                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow-2xs"
+                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow-2xs"
                                 >
-                                  <Zap className="w-3.5 h-3.5" />
-                                  {isApprovingAndLaunching ? "Launching..." : "Approve & Launch Project"}
+                                  <Zap className="w-3 h-3" />
+                                  {isApprovingAndLaunching ? "Launching..." : "Approve & Launch"}
                                 </button>
                               </>
                             )}
 
                             {isApproved && (
-                              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20 flex items-center gap-1">
-                                ✓ Approved & Live in Ongoing Tab
+                              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 flex items-center gap-1">
+                                ✓ Live in Ongoing
                               </span>
                             )}
                           </div>
@@ -784,6 +909,340 @@ export function ClientsPage() {
                 className="px-4 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-secondary text-foreground transition cursor-pointer"
               >
                 Close
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Sub-Modal: Add Request For Client */}
+      {showAddReqModal && requestClientModal && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="text-base font-bold text-foreground">Create Request for {requestClientModal.name}</h3>
+                <p className="text-xs text-muted-foreground">Proactively provision a service application for this client.</p>
+              </div>
+              <button onClick={() => setShowAddReqModal(false)} className="text-muted-foreground hover:text-foreground">✕</button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!addReqTitle.trim()) return;
+                try {
+                  await createRequestAsAdmin({
+                    client_id: requestClientModal.id,
+                    request_type: addReqType,
+                    title: addReqTitle.trim(),
+                    description: addReqDesc.trim(),
+                    estimated_total: Number(addReqAmount),
+                    currency: "ETB",
+                    status: addReqAutoLaunch ? "approved" : addReqStatus,
+                    autoLaunch: addReqAutoLaunch,
+                  });
+                  toast.success("Service request created for client.");
+                  setShowAddReqModal(false);
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to create request.");
+                }
+              }}
+              className="space-y-3.5"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Service Category</label>
+                  <select
+                    value={addReqType}
+                    onChange={(e) => setAddReqType(e.target.value as any)}
+                    className="w-full px-3 py-1.5 text-xs bg-secondary/50 border border-border rounded-lg text-foreground capitalize"
+                  >
+                    <option value="package">Curated Package</option>
+                    <option value="development">Website & App Dev</option>
+                    <option value="branding">Brand Identity</option>
+                    <option value="production">Content Production</option>
+                    <option value="custom">Custom Brief</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Estimated Amount (ETB)</label>
+                  <input
+                    type="number"
+                    value={addReqAmount}
+                    onChange={(e) => setAddReqAmount(Number(e.target.value))}
+                    className="w-full px-3 py-1.5 text-xs bg-secondary/50 border border-border rounded-lg text-foreground font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Service Title *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Enterprise E-Commerce Platform"
+                  value={addReqTitle}
+                  onChange={(e) => setAddReqTitle(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-secondary/50 border border-border rounded-lg text-foreground"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Description & Deliverables</label>
+                <textarea
+                  rows={2}
+                  placeholder="Details visible to the client..."
+                  value={addReqDesc}
+                  onChange={(e) => setAddReqDesc(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-secondary/50 border border-border rounded-lg text-foreground"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Initial Status</label>
+                <select
+                  value={addReqStatus}
+                  onChange={(e) => setAddReqStatus(e.target.value as any)}
+                  disabled={addReqAutoLaunch}
+                  className="w-full px-3 py-1.5 text-xs bg-secondary/50 border border-border rounded-lg text-foreground capitalize disabled:opacity-50"
+                >
+                  <option value="pending">Pending Review</option>
+                  <option value="payment_review">Under Payment Review</option>
+                  <option value="approved">Approved</option>
+                </select>
+              </div>
+
+              <label className="flex items-center gap-2 p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={addReqAutoLaunch}
+                  onChange={(e) => setAddReqAutoLaunch(e.target.checked)}
+                  className="rounded text-emerald-600"
+                />
+                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                  Instantly launch into Ongoing Project stream
+                </span>
+              </label>
+
+              <div className="pt-2 border-t border-border flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddReqModal(false)}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-border"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingAsAdmin}
+                  className="px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-primary-foreground"
+                >
+                  {isCreatingAsAdmin ? "Creating..." : "Save Request"}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Sub-Modal: Edit Request */}
+      {editingRequest && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-base font-bold text-foreground">Edit Service Request</h3>
+              <button onClick={() => setEditingRequest(null)} className="text-muted-foreground hover:text-foreground">✕</button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  await editRequest({
+                    id: editingRequest.id,
+                    title: editReqTitle.trim(),
+                    description: editReqDesc.trim(),
+                    estimated_total: Number(editReqAmount),
+                    status: editReqStatus,
+                  });
+                  toast.success("Request updated successfully.");
+                  setEditingRequest(null);
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to update request.");
+                }
+              }}
+              className="space-y-3"
+            >
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Title</label>
+                <input
+                  type="text"
+                  value={editReqTitle}
+                  onChange={(e) => setEditReqTitle(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-secondary/50 border border-border rounded-lg text-foreground"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Description</label>
+                <textarea
+                  rows={2}
+                  value={editReqDesc}
+                  onChange={(e) => setEditReqDesc(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-secondary/50 border border-border rounded-lg text-foreground"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Amount (ETB)</label>
+                  <input
+                    type="number"
+                    value={editReqAmount}
+                    onChange={(e) => setEditReqAmount(Number(e.target.value))}
+                    className="w-full px-3 py-1.5 text-xs bg-secondary/50 border border-border rounded-lg text-foreground font-mono"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Status</label>
+                  <select
+                    value={editReqStatus}
+                    onChange={(e) => setEditReqStatus(e.target.value as any)}
+                    className="w-full px-3 py-1.5 text-xs bg-secondary/50 border border-border rounded-lg text-foreground capitalize"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="payment_review">Payment Review</option>
+                    <option value="approved">Approved</option>
+                    <option value="declined">Declined</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-border flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingRequest(null)}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-border"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isEditingRequest}
+                  className="px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-primary-foreground"
+                >
+                  {isEditingRequest ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Sub-Modal: Confirm Wipe Client History */}
+      {confirmWipeModal && requestClientModal && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-md rounded-2xl border border-rose-500/30 shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  Wipe All History for {requestClientModal.name}?
+                </h3>
+                <span className="text-[10px] uppercase font-mono text-rose-500 font-bold">
+                  Irreversible Action
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              This will permanently delete all service applications, requests, and payment attachment records for{" "}
+              <strong className="text-foreground">{requestClientModal.name}</strong>. Their requested tab will be reset to a clean zero state.
+            </p>
+
+            <div className="pt-3 border-t border-border flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmWipeModal(false)}
+                className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-border"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isWipingClientRequests}
+                onClick={async () => {
+                  try {
+                    await wipeClientRequests(requestClientModal.id);
+                    toast.success(`Wiped all request history for ${requestClientModal.name}.`);
+                    setConfirmWipeModal(false);
+                  } catch (err: any) {
+                    toast.error(err.message || "Failed to wipe client history.");
+                  }
+                }}
+                className="px-4 py-1.5 text-xs font-bold rounded-lg bg-rose-600 hover:bg-rose-700 text-white"
+              >
+                {isWipingClientRequests ? "Wiping..." : "Yes, Wipe All History"}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Sub-Modal: Confirm Delete Single Request */}
+      {confirmDeleteReqId && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-sm rounded-2xl border border-border shadow-2xl p-5 space-y-3"
+          >
+            <div className="flex items-center gap-2 text-rose-600">
+              <Trash2 className="w-5 h-5" />
+              <h4 className="text-sm font-bold text-foreground">Delete Service Request?</h4>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Are you sure you want to permanently delete this service request?
+            </p>
+            <div className="pt-2 border-t border-border flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDeleteReqId(null)}
+                className="px-3 py-1 text-xs font-semibold rounded-lg border border-border"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isDeletingRequest}
+                onClick={async () => {
+                  try {
+                    await deleteRequest(confirmDeleteReqId);
+                    toast.success("Request deleted successfully.");
+                    setConfirmDeleteReqId(null);
+                  } catch (err: any) {
+                    toast.error(err.message);
+                  }
+                }}
+                className="px-3.5 py-1 text-xs font-bold rounded-lg bg-rose-600 text-white"
+              >
+                {isDeletingRequest ? "Deleting..." : "Delete"}
               </button>
             </div>
           </motion.div>

@@ -315,16 +315,141 @@ export function useServiceRequests(clientId?: string) {
     },
   });
 
+  // Admin: Delete a single service request
+  const deleteRequestMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("service_requests")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service_requests"] });
+    },
+  });
+
+  // Admin: Wipe out all service requests & application history for a specific client
+  const wipeClientRequestsMutation = useMutation({
+    mutationFn: async (clientId: string) => {
+      const { error } = await supabase
+        .from("service_requests")
+        .delete()
+        .eq("client_id", clientId);
+
+      if (error) throw error;
+      return clientId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service_requests"] });
+    },
+  });
+
+  // Admin: Edit single request details
+  const editRequestMutation = useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      title?: string;
+      description?: string;
+      estimated_total?: number;
+      currency?: string;
+      urgency?: "low" | "normal" | "high" | "urgent";
+      status?: ServiceRequestStatus;
+      manager_notes?: string;
+      receipt_url?: string;
+    }) => {
+      const { id, ...updates } = payload;
+      const { data, error } = await supabase
+        .from("service_requests")
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as ServiceRequest;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service_requests"] });
+    },
+  });
+
+  // Admin: Create request on behalf of any client
+  const createRequestAsAdminMutation = useMutation({
+    mutationFn: async (payload: {
+      client_id: string;
+      request_type: ServiceRequestType;
+      title: string;
+      description?: string;
+      estimated_total: number;
+      currency?: string;
+      urgency?: "low" | "normal" | "high" | "urgent";
+      status?: ServiceRequestStatus;
+      manager_notes?: string;
+      catalog_items?: any[];
+      autoLaunch?: boolean;
+    }) => {
+      const { data: org } = await supabase.from("organizations").select("id").limit(1).single();
+      const orgId = org?.id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29";
+
+      const initialStatus = payload.status || (payload.autoLaunch ? "approved" : "pending");
+
+      const { data: createdReq, error } = await supabase
+        .from("service_requests")
+        .insert({
+          organization_id: orgId,
+          client_id: payload.client_id,
+          requested_by: user?.id,
+          request_type: payload.request_type,
+          title: payload.title,
+          description: payload.description || "",
+          catalog_items: payload.catalog_items || [],
+          estimated_total: payload.estimated_total,
+          currency: payload.currency || "ETB",
+          urgency: payload.urgency || "normal",
+          status: initialStatus,
+          manager_notes: payload.manager_notes || "Created directly by agency administrator.",
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // If marked as approved or auto-launch requested, spawn the project and service immediately
+      if (initialStatus === "approved" || payload.autoLaunch) {
+        await approveAndLaunchProjectMutation.mutateAsync(createdReq as ServiceRequest);
+      }
+
+      return createdReq as ServiceRequest;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service_requests"] });
+    },
+  });
+
   return {
     requests: query.data || [],
     isLoading: query.isLoading,
     error: query.error,
     createRequest: createRequestMutation.mutateAsync,
     isCreating: createRequestMutation.isPending,
+    createRequestAsAdmin: createRequestAsAdminMutation.mutateAsync,
+    isCreatingAsAdmin: createRequestAsAdminMutation.isPending,
     submitReceipt: submitReceiptMutation.mutateAsync,
     isSubmittingReceipt: submitReceiptMutation.isPending,
     updateStatus: updateStatusMutation.mutateAsync,
     isUpdatingStatus: updateStatusMutation.isPending,
+    editRequest: editRequestMutation.mutateAsync,
+    isEditingRequest: editRequestMutation.isPending,
+    deleteRequest: deleteRequestMutation.mutateAsync,
+    isDeletingRequest: deleteRequestMutation.isPending,
+    wipeClientRequests: wipeClientRequestsMutation.mutateAsync,
+    isWipingClientRequests: wipeClientRequestsMutation.isPending,
     approveAndLaunchProject: approveAndLaunchProjectMutation.mutateAsync,
     isApprovingAndLaunching: approveAndLaunchProjectMutation.isPending,
     refetch: query.refetch,
