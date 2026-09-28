@@ -250,37 +250,39 @@ export function ClientServicesPage() {
                         </div>
 
                         {/* Circular Progress, Payment, Details Action & Toggle */}
-                        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between xl:justify-end gap-4 sm:gap-6 pt-3.5 xl:pt-0 border-t xl:border-t-0 border-border/80 shrink-0">
-                          {/* Circular Progress Gauge */}
-                          <div className="shrink-0">
-                            <CircularProgress
-                              value={progressVal}
-                              size={50}
-                              strokeWidth={4.5}
-                              label="Progress"
-                              sublabel={
-                                serviceTasks.length > 0
-                                  ? `${completedTasksCount}/${serviceTasks.length} Tasks`
-                                  : progressVal === 100
-                                  ? "Completed"
-                                  : "Active Stream"
-                              }
-                            />
-                          </div>
+                        <div className="flex flex-wrap items-center justify-between xl:justify-end gap-3 sm:gap-5 pt-3 xl:pt-0 border-t xl:border-t-0 border-border/80 w-full xl:w-auto">
+                          <div className="flex items-center gap-3 sm:gap-5 flex-wrap">
+                            {/* Circular Progress Gauge */}
+                            <div className="shrink-0">
+                              <CircularProgress
+                                value={progressVal}
+                                size={46}
+                                strokeWidth={4}
+                                label="Progress"
+                                sublabel={
+                                  serviceTasks.length > 0
+                                    ? `${completedTasksCount}/${serviceTasks.length} Tasks`
+                                    : progressVal === 100
+                                    ? "Completed"
+                                    : "Active Phase"
+                                }
+                              />
+                            </div>
 
-                          {/* Payment status */}
-                          <div className="text-left sm:text-right min-w-[85px] shrink-0">
-                            <span className="text-[10px] uppercase font-mono text-muted-foreground font-semibold block">
-                              Paid to Date
-                            </span>
-                            <span className="text-xs sm:text-sm font-bold font-mono text-foreground block">
-                              {formatCurrency(totalPaid, currency)}
-                            </span>
-                            {totalBilled > 0 && (
-                              <span className="text-[10px] text-muted-foreground block font-mono">
-                                of {formatCurrency(totalBilled, currency)}
+                            {/* Payment status */}
+                            <div className="text-left sm:text-right min-w-[75px] shrink-0">
+                              <span className="text-[10px] uppercase font-mono text-muted-foreground font-semibold block">
+                                Paid to Date
                               </span>
-                            )}
+                              <span className="text-xs sm:text-sm font-bold font-mono text-foreground block">
+                                {formatCurrency(totalPaid, currency)}
+                              </span>
+                              {totalBilled > 0 && (
+                                <span className="text-[10px] text-muted-foreground block font-mono">
+                                  of {formatCurrency(totalBilled, currency)}
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           {/* Action Buttons */}
@@ -292,11 +294,10 @@ export function ClientServicesPage() {
                                 setDetailModalService(service);
                                 setSelectedTaskId(null);
                               }}
-                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border shadow-2xs hover:border-primary/40 transition-all cursor-pointer shrink-0"
+                              className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border shadow-2xs hover:border-primary/40 transition-all cursor-pointer shrink-0"
                             >
                               <Eye className="w-3.5 h-3.5 text-primary" />
-                              <span className="hidden sm:inline">See More Details</span>
-                              <span className="sm:hidden">Details</span>
+                              <span>See Details</span>
                             </button>
 
                             <button
@@ -305,7 +306,7 @@ export function ClientServicesPage() {
                                 e.stopPropagation();
                                 toggleExpand(service.id);
                               }}
-                              className="p-2 rounded-xl border border-border bg-secondary/40 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer shrink-0"
+                              className="p-1.5 sm:p-2 rounded-xl border border-border bg-secondary/40 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer shrink-0"
                               aria-label="Toggle details"
                             >
                               {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -395,7 +396,7 @@ export function ClientServicesPage() {
                                 <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                                   Milestone Progression
                                 </h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                                   {serviceMilestones.map((m, idx) => (
                                     <div
                                       key={m.id}
