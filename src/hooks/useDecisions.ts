@@ -35,11 +35,28 @@ export function useDecisions(serviceId?: string, projectId?: string) {
         description: newDec.description,
         decision_date: newDec.decision_date || new Date().toISOString().split("T")[0],
         made_by: newDec.made_by || user?.full_name || "Operations Lead",
+        visibility: newDec.visibility || "client",
       };
 
       const { data, error } = await supabase.from("decisions").insert(payload).select().single();
       if (error) throw error;
       return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["decisions"] });
+    },
+  });
+
+  const updateDecisionMutation = useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string } & Partial<Decision>) => {
+      const { data, error } = await supabase
+        .from("decisions")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Decision;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["decisions"] });
@@ -61,8 +78,10 @@ export function useDecisions(serviceId?: string, projectId?: string) {
     ...query,
     decisions: query.data || [],
     createDecision: createDecisionMutation.mutateAsync,
+    updateDecision: updateDecisionMutation.mutateAsync,
     deleteDecision: deleteDecisionMutation.mutateAsync,
     isCreating: createDecisionMutation.isPending,
+    isUpdating: updateDecisionMutation.isPending,
   };
 }
 

@@ -3,19 +3,25 @@ import { supabase } from "@/integrations/supabase/client";
 import type { FileRecord, Visibility } from "@/types";
 import { useAuth } from "@/lib/auth";
 
-export function useFiles(clientId?: string, serviceId?: string) {
+export function useFiles(clientId?: string, serviceId?: string, projectId?: string) {
   const queryClient = useQueryClient();
   const { user, role } = useAuth();
 
   const isClientRole = role === "client" || role === "client_owner" || role === "client_member";
 
   const query = useQuery({
-    queryKey: ["files", clientId || "all", serviceId || "all", role, user?.id],
+    queryKey: ["files", clientId || "all", serviceId || "all", projectId || "all", role, user?.id],
     queryFn: async (): Promise<FileRecord[]> => {
       let req = supabase.from("files").select("*").order("created_at", { ascending: false });
 
       if (clientId) req = req.eq("client_id", clientId);
-      if (serviceId) req = req.eq("service_id", serviceId);
+      if (serviceId && projectId) {
+        req = req.or(`service_id.eq.${serviceId},project_id.eq.${projectId}`);
+      } else if (serviceId) {
+        req = req.eq("service_id", serviceId);
+      } else if (projectId) {
+        req = req.eq("project_id", projectId);
+      }
 
       // Clients only see files with visibility = 'client'
       if (isClientRole) {

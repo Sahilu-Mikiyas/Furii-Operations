@@ -38,6 +38,10 @@ import {
   Check,
   Search,
   Filter,
+  FileText,
+  FileCode,
+  ShieldCheck,
+  MessageSquare,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -50,6 +54,10 @@ import type {
   Milestone,
   Deliverable,
   DeliverableStatus,
+  Approval,
+  ApprovalStatus,
+  Decision,
+  FileRecord,
   FileCategory,
   TaskStatus,
   TaskPriority,
@@ -189,9 +197,25 @@ export function ProjectsPage() {
     isUploading: isDeliverableUploading,
     isCreating: isDeliverableCreating,
   } = useDeliverables(selectedService?.id, selectedProject?.id);
-  const { approvals } = useApprovals(targetClientId);
+  const {
+    approvals,
+    createApproval,
+    updateApproval,
+    deleteApproval,
+    approveDeliverable,
+    requestChanges,
+    isApproving,
+    isRequestingChanges,
+    isCreatingApproval,
+  } = useApprovals(targetClientId);
   const { workRecords, createWorkRecord, deleteWorkRecord, isCreating: isCreatingRecord } = useWorkRecords(selectedService?.id, selectedProject?.id);
-  const { files } = useFiles(selectedProject?.client_id, selectedService?.id);
+  const {
+    files,
+    uploadFile,
+    deleteFile,
+    isUploading: isFileUploading,
+    canUpload: canUploadFile,
+  } = useFiles(selectedProject?.client_id, selectedService?.id, selectedProject?.id);
   const {
     milestones: serviceMilestones,
     createMilestone,
@@ -199,7 +223,13 @@ export function ProjectsPage() {
     deleteMilestone,
     updateMilestoneStatus,
   } = useMilestones(selectedService?.id, selectedProject?.id);
-  const { decisions: serviceDecisions, createDecision, deleteDecision } = useDecisions(selectedService?.id, selectedProject?.id);
+  const {
+    decisions: serviceDecisions,
+    createDecision,
+    updateDecision,
+    deleteDecision,
+    isCreating: isCreatingDecision,
+  } = useDecisions(selectedService?.id, selectedProject?.id);
   const serviceApprovals = approvals.filter((a) => a.service_id === selectedService?.id || a.project_id === selectedProject?.id);
 
   // Modal States
@@ -313,6 +343,37 @@ export function ProjectsPage() {
   const [editDelivName, setEditDelivName] = useState("");
   const [editDelivDesc, setEditDelivDesc] = useState("");
   const [editDelivStatus, setEditDelivStatus] = useState<DeliverableStatus>("draft");
+
+  // Approvals States
+  const [showCreateApprovalModal, setShowCreateApprovalModal] = useState(false);
+  const [approvalTitle, setApprovalTitle] = useState("");
+  const [approvalDesc, setApprovalDesc] = useState("");
+  const [approvalDeliverableId, setApprovalDeliverableId] = useState("");
+  const [feedbackModalApprovalId, setFeedbackModalApprovalId] = useState<string | null>(null);
+  const [feedbackModalComment, setFeedbackModalComment] = useState("");
+  const [editingApproval, setEditingApproval] = useState<Approval | null>(null);
+  const [editApprovalTitle, setEditApprovalTitle] = useState("");
+  const [editApprovalDesc, setEditApprovalDesc] = useState("");
+  const [editApprovalStatus, setEditApprovalStatus] = useState<ApprovalStatus>("awaiting_review");
+  const [approvalFilterStatus, setApprovalFilterStatus] = useState<string>("all");
+
+  // Decisions States
+  const [newDecisionVisibility, setNewDecisionVisibility] = useState<Visibility>("client");
+  const [editingDecision, setEditingDecision] = useState<Decision | null>(null);
+  const [editDecisionTitle, setEditDecisionTitle] = useState("");
+  const [editDecisionDesc, setEditDecisionDesc] = useState("");
+  const [editDecisionDate, setEditDecisionDate] = useState("");
+  const [editDecisionMadeBy, setEditDecisionMadeBy] = useState("Operations Lead");
+  const [editDecisionVisibility, setEditDecisionVisibility] = useState<Visibility>("client");
+
+  // Files States
+  const [showUploadFileModal, setShowUploadFileModal] = useState(false);
+  const [uploadFileObj, setUploadFileObj] = useState<File | null>(null);
+  const [uploadFileName, setUploadFileName] = useState("");
+  const [uploadFileCategory, setUploadFileCategory] = useState<FileCategory>("document");
+  const [uploadFileVisibility, setUploadFileVisibility] = useState<Visibility>("client");
+  const [fileSearch, setFileSearch] = useState("");
+  const [fileCategoryFilter, setFileCategoryFilter] = useState("all");
 
   // Open Edit Project Modal
   const openEditProject = () => {
@@ -697,10 +758,12 @@ export function ProjectsPage() {
         description: newDecisionDesc,
         decision_date: newDecisionDate,
         made_by: newDecisionMadeBy,
+        visibility: newDecisionVisibility,
       });
       toast.success(`Decision "${newDecisionTitle}" permanently logged.`);
       setNewDecisionTitle("");
       setNewDecisionDesc("");
+      setNewDecisionVisibility("client");
       setShowAddDecisionModal(false);
     } catch (err: any) {
       toast.error(err.message || "Failed to log decision.");
@@ -843,6 +906,182 @@ export function ProjectsPage() {
       toast.success(`Deliverable "${name}" deleted.`);
     } catch (err: any) {
       toast.error(err.message || "Failed to delete deliverable.");
+    }
+  };
+
+  // Decision Handlers
+  const handleOpenEditDecision = (dec: Decision) => {
+    setEditingDecision(dec);
+    setEditDecisionTitle(dec.title);
+    setEditDecisionDesc(dec.description);
+    setEditDecisionDate(dec.decision_date || new Date().toISOString().split("T")[0]);
+    setEditDecisionMadeBy(dec.made_by || "Operations Lead");
+    setEditDecisionVisibility(dec.visibility || "client");
+  };
+
+  const handleUpdateDecision = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDecision || !editDecisionTitle.trim()) return;
+
+    try {
+      await updateDecision({
+        id: editingDecision.id,
+        title: editDecisionTitle.trim(),
+        description: editDecisionDesc.trim(),
+        decision_date: editDecisionDate,
+        made_by: editDecisionMadeBy.trim(),
+        visibility: editDecisionVisibility,
+      });
+
+      toast.success("Strategic decision updated successfully.");
+      setEditingDecision(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update decision.");
+    }
+  };
+
+  // Approval Handlers
+  const handleCreateApprovalRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approvalTitle.trim() || !selectedProject) return;
+
+    try {
+      await createApproval({
+        client_id: selectedProject.client_id,
+        project_id: selectedProject.id,
+        service_id: selectedService?.id || null,
+        deliverable_id: approvalDeliverableId || null,
+        title: approvalTitle.trim(),
+        description: approvalDesc.trim() || null,
+        status: "awaiting_review",
+      });
+
+      toast.success(`Approval request "${approvalTitle}" submitted to client.`);
+      setApprovalTitle("");
+      setApprovalDesc("");
+      setApprovalDeliverableId("");
+      setShowCreateApprovalModal(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit approval request.");
+    }
+  };
+
+  const handleQuickRequestApprovalForDeliverable = (deliv: Deliverable) => {
+    setApprovalDeliverableId(deliv.id);
+    setApprovalTitle(`Review & Approval: ${deliv.name || (deliv as any).title}`);
+    setApprovalDesc(deliv.description || "Formal client sign-off requested for this deliverable asset.");
+    setShowCreateApprovalModal(true);
+  };
+
+  const handleApproveApproval = async (approvalId: string) => {
+    try {
+      await approveDeliverable({ id: approvalId });
+      toast.success("Approval granted! Deliverable and milestone phase unlocked.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to approve.");
+    }
+  };
+
+  const handleRequestChangesApproval = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feedbackModalApprovalId || !feedbackModalComment.trim()) {
+      toast.error("Please provide revision feedback or changes requested.");
+      return;
+    }
+
+    try {
+      await requestChanges({
+        id: feedbackModalApprovalId,
+        comment: feedbackModalComment.trim(),
+      });
+
+      toast.info("Revision notes submitted. Team notified.");
+      setFeedbackModalApprovalId(null);
+      setFeedbackModalComment("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit change request.");
+    }
+  };
+
+  const handleOpenEditApproval = (appr: Approval) => {
+    setEditingApproval(appr);
+    setEditApprovalTitle(appr.title);
+    setEditApprovalDesc(appr.description || "");
+    setEditApprovalStatus(appr.status);
+  };
+
+  const handleUpdateApproval = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingApproval || !editApprovalTitle.trim()) return;
+
+    try {
+      await updateApproval({
+        id: editingApproval.id,
+        title: editApprovalTitle.trim(),
+        description: editApprovalDesc.trim(),
+        status: editApprovalStatus,
+      });
+
+      toast.success("Approval record updated.");
+      setEditingApproval(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update approval.");
+    }
+  };
+
+  const handleDeleteApproval = async (id: string, title: string) => {
+    if (!window.confirm(`Delete approval request "${title}"?`)) return;
+
+    try {
+      await deleteApproval(id);
+      toast.success("Approval request removed.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete approval.");
+    }
+  };
+
+  // Files Handlers
+  const formatFileSize = (bytes: number | null | undefined) => {
+    if (!bytes) return "—";
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${mb.toFixed(1)} MB`;
+  };
+
+  const handleUploadFileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFileObj || !selectedProject) {
+      toast.error("Please select a file to upload.");
+      return;
+    }
+
+    try {
+      await uploadFile({
+        file: uploadFileObj,
+        clientId: selectedProject.client_id,
+        projectId: selectedProject.id,
+        serviceId: selectedService?.id,
+        category: uploadFileCategory,
+        visibility: uploadFileVisibility,
+      });
+
+      toast.success(`File "${uploadFileObj.name}" uploaded successfully.`);
+      setUploadFileObj(null);
+      setUploadFileName("");
+      setShowUploadFileModal(false);
+    } catch (err: any) {
+      toast.error(err.message || "File upload failed.");
+    }
+  };
+
+  const handleDeleteFileRecord = async (file: { id: string; name: string; file_key?: string | null }) => {
+    if (!window.confirm(`Permanently delete "${file.name}"?`)) return;
+
+    try {
+      await deleteFile({ id: file.id, file_key: file.file_key });
+      toast.success(`File "${file.name}" deleted.`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete file.");
     }
   };
 
@@ -1784,8 +2023,17 @@ export function ProjectsPage() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                        <div className="flex items-center gap-2 shrink-0 self-start sm:self-center flex-wrap">
                           <StatusBadge status={deliv.status} />
+
+                          <button
+                            onClick={() => handleQuickRequestApprovalForDeliverable(deliv)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20 transition-colors cursor-pointer"
+                            title="Submit for Client Approval"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Request Approval</span>
+                          </button>
 
                           {isManager && (
                             <>
@@ -1858,107 +2106,477 @@ export function ProjectsPage() {
 
             {activeTab === "approvals" && (
               <div className="space-y-4">
-                {serviceApprovals.length === 0 ? (
-                  <div className="p-8 text-center bg-card rounded-xl border border-dashed border-border text-xs text-muted-foreground">
-                    No active approvals in this workspace.
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border shadow-2xs">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Service Approvals & Sign-Offs</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Client-facing review queue for design outputs, key milestones, and deliverable sign-offs.
+                    </p>
                   </div>
-                ) : (
-                  serviceApprovals.map((appr) => (
-                    <div key={appr.id} className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <h4 className="text-sm font-bold text-foreground">{appr.title}</h4>
-                          <p className="text-xs text-muted-foreground mt-0.5">{appr.description}</p>
-                        </div>
-                        <StatusBadge status={appr.status} />
-                      </div>
-                      {appr.client_comment && (
-                        <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-1">
-                          <span className="text-[10px] font-mono font-bold uppercase text-amber-900">
-                            Client Feedback:
-                          </span>
-                          <p className="text-xs text-amber-950 font-medium">{appr.client_comment}</p>
-                        </div>
-                      )}
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1 bg-secondary/50 p-1 rounded-lg border border-border text-xs">
+                      {[
+                        { id: "all", label: "All" },
+                        { id: "awaiting_review", label: "Awaiting Review" },
+                        { id: "approved", label: "Approved" },
+                        { id: "changes_requested", label: "Changes Requested" },
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setApprovalFilterStatus(tab.id)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                            approvalFilterStatus === tab.id
+                              ? "bg-primary text-primary-foreground shadow-2xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
                     </div>
-                  ))
-                )}
+
+                    <button
+                      onClick={() => {
+                        setApprovalTitle("");
+                        setApprovalDesc("");
+                        setApprovalDeliverableId("");
+                        setShowCreateApprovalModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Request Approval
+                    </button>
+                  </div>
+                </div>
+
+                {(() => {
+                  const filteredApprovals = serviceApprovals.filter((a) => {
+                    if (approvalFilterStatus === "all") return true;
+                    if (approvalFilterStatus === "awaiting_review") return a.status === "awaiting_review" || a.status === "pending";
+                    return a.status === approvalFilterStatus;
+                  });
+
+                  if (filteredApprovals.length === 0) {
+                    return (
+                      <div className="p-12 text-center bg-card rounded-2xl border border-dashed border-border space-y-3">
+                        <CheckCircle2 className="w-8 h-8 text-muted-foreground mx-auto" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-bold text-foreground">No active approvals in this workspace</p>
+                          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                            Submit formal sign-off requests for deliverables or milestone sign-offs to request client sign-off.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setApprovalTitle("");
+                            setApprovalDesc("");
+                            setApprovalDeliverableId("");
+                            setShowCreateApprovalModal(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Request First Approval
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {filteredApprovals.map((appr) => {
+                        const isPending = appr.status === "awaiting_review" || appr.status === "pending";
+                        const linkedDeliv = deliverables.find((d) => d.id === appr.deliverable_id);
+                        const fileUrl = (appr as any).deliverable_version?.file_url;
+                        const fileName = (appr as any).deliverable_version?.file_name;
+
+                        return (
+                          <div
+                            key={appr.id}
+                            className={`p-6 rounded-2xl bg-card border transition-all space-y-4 ${
+                              isPending
+                                ? "border-amber-300 shadow-md ring-1 ring-amber-200/50"
+                                : "border-border shadow-2xs"
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[10px] font-mono uppercase bg-primary/10 text-primary font-bold px-2 py-0.5 rounded">
+                                    Approval Request
+                                  </span>
+                                  {linkedDeliv && (
+                                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-secondary text-foreground font-semibold border border-border">
+                                      📦 {linkedDeliv.name || linkedDeliv.title}
+                                    </span>
+                                  )}
+                                  <span className="text-xs text-muted-foreground font-mono">
+                                    Requested {formatDate(appr.requested_at || appr.created_at)}
+                                  </span>
+                                </div>
+                                <h4 className="text-base font-bold text-foreground mt-1">{appr.title}</h4>
+                                {appr.description && (
+                                  <p className="text-xs text-muted-foreground leading-relaxed">{appr.description}</p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                                <StatusBadge status={appr.status} />
+
+                                {isManager && (
+                                  <>
+                                    <button
+                                      onClick={() => handleOpenEditApproval(appr)}
+                                      className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                                      title="Edit approval info"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteApproval(appr.id, appr.title)}
+                                      className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                      title="Delete approval"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Linked Deliverable Asset Download */}
+                            {(fileUrl || linkedDeliv) && (
+                              <div className="p-3 bg-secondary/30 border border-border/80 rounded-xl flex items-center justify-between gap-2 text-xs">
+                                <span className="font-mono text-muted-foreground truncate">
+                                  📎 {fileName || linkedDeliv?.name || "Deliverable Asset Package"}
+                                </span>
+                                {fileUrl && (
+                                  <a
+                                    href={fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-card border border-border hover:bg-secondary flex items-center gap-1 text-foreground transition-colors shrink-0"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    Download Output
+                                  </a>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Client Feedback Log if present */}
+                            {appr.client_comment && (
+                              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-1 text-xs">
+                                <div className="flex items-center gap-2 font-semibold text-amber-900 dark:text-amber-200">
+                                  <MessageSquare className="h-3.5 w-3.5 text-amber-600" />
+                                  <span>Client Feedback & Revisions:</span>
+                                </div>
+                                <p className="text-amber-950 dark:text-amber-100 font-medium pl-5">{appr.client_comment}</p>
+                              </div>
+                            )}
+
+                            {/* Sign-off Actions */}
+                            {isPending && (
+                              <div className="pt-2 flex flex-wrap items-center gap-2.5 border-t border-border/50">
+                                <button
+                                  onClick={() => handleApproveApproval(appr.id)}
+                                  disabled={isApproving}
+                                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+                                >
+                                  {isApproving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                  Approve & Authorize
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setFeedbackModalApprovalId(appr.id);
+                                    setFeedbackModalComment(appr.client_comment || "");
+                                  }}
+                                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer"
+                                >
+                                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                                  Request Changes / Revision
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
             {activeTab === "decisions" && (
               <div className="space-y-4">
-                {isManager && (
-                  <div className="flex justify-end">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border shadow-2xs">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Strategic Architecture & Decisions</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Permanent audit log of architectural choices, brand pivots, and technical directives.
+                    </p>
+                  </div>
+                  {isManager && (
                     <button
-                      onClick={() => setShowAddDecisionModal(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+                      onClick={() => {
+                        setNewDecisionTitle("");
+                        setNewDecisionDesc("");
+                        setNewDecisionVisibility("client");
+                        setShowAddDecisionModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer shrink-0"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       Log Strategic Decision
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {serviceDecisions.length === 0 ? (
-                  <div className="p-8 text-center bg-card rounded-xl border border-dashed border-border text-xs text-muted-foreground">
-                    No strategic decisions recorded yet.
+                  <div className="p-12 text-center bg-card rounded-2xl border border-dashed border-border space-y-3">
+                    <Scale className="w-8 h-8 text-muted-foreground mx-auto" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-foreground">No strategic decisions recorded yet</p>
+                      <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                        Document critical technology pivots, architectural agreements, and high-stakes client directives.
+                      </p>
+                    </div>
+                    {isManager && (
+                      <button
+                        onClick={() => {
+                          setNewDecisionTitle("");
+                          setNewDecisionDesc("");
+                          setNewDecisionVisibility("client");
+                          setShowAddDecisionModal(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Log First Decision
+                      </button>
+                    )}
                   </div>
                 ) : (
-                  serviceDecisions.map((dec) => (
-                    <div key={dec.id} className="p-5 rounded-xl bg-card border border-border shadow-2xs space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-bold text-foreground">{dec.title}</h4>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono text-muted-foreground">
-                            {formatDate(dec.decision_date)}
-                          </span>
+                  <div className="space-y-4">
+                    {serviceDecisions.map((dec) => (
+                      <div key={dec.id} className="p-5 rounded-xl bg-card border border-border shadow-2xs space-y-2.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-mono text-muted-foreground font-semibold">
+                                {formatDate(dec.decision_date)}
+                              </span>
+                              <span
+                                className={`text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded border ${
+                                  dec.visibility === "internal"
+                                    ? "bg-amber-500/10 text-amber-600 border-amber-200"
+                                    : "bg-emerald-500/10 text-emerald-600 border-emerald-200"
+                                }`}
+                              >
+                                {dec.visibility === "internal" ? "Internal Directive" : "Client Visible"}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-bold text-foreground">{dec.title}</h4>
+                          </div>
+
                           {isManager && (
-                            <button
-                              onClick={() => handleDeleteDecision(dec.id, dec.title)}
-                              className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                              title="Delete decision"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => handleOpenEditDecision(dec)}
+                                className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                                title="Edit decision"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDecision(dec.id, dec.title)}
+                                className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                title="Delete decision"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           )}
                         </div>
+
+                        <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">{dec.description}</p>
+                        <div className="pt-1 text-[11px] font-mono text-primary font-semibold flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>Authorized by: {dec.made_by}</span>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed">{dec.description}</p>
-                      <div className="pt-1 text-[11px] font-mono text-primary font-semibold">
-                        Authorized by: {dec.made_by}
-                      </div>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 )}
               </div>
             )}
 
             {activeTab === "files" && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {files.map((file) => (
-                  <div
-                    key={file.id}
-                    className="p-4 rounded-xl bg-card border border-border shadow-2xs flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <FolderOpen className="h-5 w-5 text-primary shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-foreground truncate">{file.name}</p>
-                        <p className="text-[10px] font-mono text-muted-foreground uppercase">{file.category}</p>
-                      </div>
-                    </div>
-                    <a
-                      href={file.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-2.5 py-1 rounded text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border/80 flex items-center gap-1 transition-colors"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Download
-                    </a>
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border shadow-2xs">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Service Files & Asset Vault</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Repository of contracts, vector graphics, code packages, and media assets.
+                    </p>
                   </div>
-                ))}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setUploadFileObj(null);
+                        setUploadFileName("");
+                        setShowUploadFileModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer shrink-0"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      Upload File
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search & Filter Toolbar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-2xs">
+                  <div className="relative flex-1 min-w-[200px] max-w-sm">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={fileSearch}
+                      onChange={(e) => setFileSearch(e.target.value)}
+                      placeholder="Search files by name..."
+                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1 overflow-x-auto text-xs">
+                    {[
+                      { id: "all", label: "All" },
+                      { id: "document", label: "Documents" },
+                      { id: "asset", label: "Assets" },
+                      { id: "brand", label: "Brand" },
+                      { id: "contract", label: "Contracts" },
+                      { id: "raw_footage", label: "Footage" },
+                      { id: "export", label: "Exports" },
+                    ].map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setFileCategoryFilter(cat.id)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                          fileCategoryFilter === cat.id
+                            ? "bg-primary text-primary-foreground shadow-2xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {(() => {
+                  const filteredFiles = files.filter((f) => {
+                    const matchesCategory = fileCategoryFilter === "all" || f.category === fileCategoryFilter;
+                    const matchesSearch = f.name.toLowerCase().includes(fileSearch.toLowerCase());
+                    return matchesCategory && matchesSearch;
+                  });
+
+                  if (filteredFiles.length === 0) {
+                    return (
+                      <div className="p-12 text-center bg-card rounded-2xl border border-dashed border-border space-y-3">
+                        <FolderOpen className="w-8 h-8 text-muted-foreground mx-auto" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-bold text-foreground">No files in this workspace</p>
+                          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                            Store technical documents, client assets, design guidelines, or deliverables for immediate access.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setUploadFileObj(null);
+                            setUploadFileName("");
+                            setShowUploadFileModal(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          Upload First File
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {filteredFiles.map((file) => (
+                        <div
+                          key={file.id}
+                          className="p-4 rounded-xl bg-card border border-border shadow-2xs flex flex-col justify-between gap-3 hover:border-primary/40 transition-colors"
+                        >
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
+                              {file.category === "contract" ? (
+                                <FileText className="w-5 h-5" />
+                              ) : file.category === "asset" || file.category === "brand" ? (
+                                <FolderOpen className="w-5 h-5" />
+                              ) : (
+                                <FileCode className="w-5 h-5" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-foreground truncate" title={file.name}>
+                                {file.name}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] font-mono uppercase bg-secondary px-1.5 py-0.5 rounded text-muted-foreground font-semibold">
+                                  {file.category}
+                                </span>
+                                <span className="text-[10px] font-mono text-muted-foreground">
+                                  {formatFileSize(file.file_size)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-border/60">
+                            <span
+                              className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded ${
+                                file.visibility === "internal"
+                                  ? "bg-amber-500/10 text-amber-600"
+                                  : "bg-emerald-500/10 text-emerald-600"
+                              }`}
+                            >
+                              {file.visibility === "internal" ? "Internal" : "Client Visible"}
+                            </span>
+
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={file.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2.5 py-1 rounded text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border/80 flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>Get</span>
+                              </a>
+                              {isManager && (
+                                <button
+                                  onClick={() => handleDeleteFileRecord(file)}
+                                  className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                  title="Delete file"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -2393,6 +3011,18 @@ export function ProjectsPage() {
                     className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Audience Visibility</label>
+                <select
+                  value={newDecisionVisibility}
+                  onChange={(e) => setNewDecisionVisibility(e.target.value as Visibility)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden cursor-pointer"
+                >
+                  <option value="client">Client Visible (Shared in portal)</option>
+                  <option value="internal">Internal Team Only</option>
+                </select>
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-2">
@@ -3232,6 +3862,415 @@ export function ProjectsPage() {
                   className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer"
                 >
                   Save Changes
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Create Approval Request Modal */}
+      {showCreateApprovalModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">Request Client Approval</h2>
+                <p className="text-xs text-muted-foreground">
+                  Submit deliverables or milestone outputs for formal client review and sign-off.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCreateApprovalModal(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateApprovalRequest} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Approval Title</label>
+                <input
+                  type="text"
+                  required
+                  value={approvalTitle}
+                  onChange={(e) => setApprovalTitle(e.target.value)}
+                  placeholder="e.g. Sign-off: E-Commerce UI High-Fidelity Prototypes"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">
+                  Scope & Review Instructions (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={approvalDesc}
+                  onChange={(e) => setApprovalDesc(e.target.value)}
+                  placeholder="Key review points, what to examine, and criteria for sign-off..."
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Linked Deliverable (Optional)</label>
+                <select
+                  value={approvalDeliverableId}
+                  onChange={(e) => setApprovalDeliverableId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden cursor-pointer"
+                >
+                  <option value="">— General Service Sign-off (No specific file) —</option>
+                  {deliverables.map((deliv) => (
+                    <option key={deliv.id} value={deliv.id}>
+                      {deliv.name || deliv.title} (v{deliv.current_version})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateApprovalModal(false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingApproval}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {isCreatingApproval && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Submit Request
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Revision Request Feedback Modal */}
+      {feedbackModalApprovalId && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">Request Revisions & Modifications</h2>
+                <p className="text-xs text-muted-foreground">
+                  Provide actionable feedback on what requires adjustment before authorization.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setFeedbackModalApprovalId(null);
+                  setFeedbackModalComment("");
+                }}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRequestChangesApproval} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Feedback / Requested Changes</label>
+                <textarea
+                  rows={4}
+                  required
+                  value={feedbackModalComment}
+                  onChange={(e) => setFeedbackModalComment(e.target.value)}
+                  placeholder="e.g. Please update brand typography on the hero headline and export 2x vector assets for retina displays..."
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFeedbackModalApprovalId(null);
+                    setFeedbackModalComment("");
+                  }}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isRequestingChanges}
+                  className="px-4 py-1.5 text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {isRequestingChanges && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Submit Feedback
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit Approval Record Modal */}
+      {editingApproval && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Edit Approval Request</h2>
+              <button
+                onClick={() => setEditingApproval(null)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateApproval} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editApprovalTitle}
+                  onChange={(e) => setEditApprovalTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={editApprovalDesc}
+                  onChange={(e) => setEditApprovalDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Status</label>
+                <select
+                  value={editApprovalStatus}
+                  onChange={(e) => setEditApprovalStatus(e.target.value as ApprovalStatus)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden cursor-pointer"
+                >
+                  <option value="awaiting_review">Awaiting Review</option>
+                  <option value="approved">Approved</option>
+                  <option value="changes_requested">Changes Requested</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingApproval(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit Strategic Decision Modal */}
+      {editingDecision && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Edit Strategic Decision</h2>
+              <button
+                onClick={() => setEditingDecision(null)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateDecision} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Decision Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editDecisionTitle}
+                  onChange={(e) => setEditDecisionTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Rationale & Context</label>
+                <textarea
+                  rows={3}
+                  required
+                  value={editDecisionDesc}
+                  onChange={(e) => setEditDecisionDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Decision Date</label>
+                  <input
+                    type="date"
+                    value={editDecisionDate}
+                    onChange={(e) => setEditDecisionDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Authorized By</label>
+                  <input
+                    type="text"
+                    value={editDecisionMadeBy}
+                    onChange={(e) => setEditDecisionMadeBy(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Audience Visibility</label>
+                <select
+                  value={editDecisionVisibility}
+                  onChange={(e) => setEditDecisionVisibility(e.target.value as Visibility)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden cursor-pointer"
+                >
+                  <option value="client">Client Visible (Shared in portal)</option>
+                  <option value="internal">Internal Team Only</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingDecision(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Upload File Modal */}
+      {showUploadFileModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">Upload Workspace File</h2>
+                <p className="text-xs text-muted-foreground">
+                  Store project assets, design vectors, contracts, or specifications.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowUploadFileModal(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUploadFileSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Choose Asset File</label>
+                <input
+                  type="file"
+                  required
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      setUploadFileObj(f);
+                      if (!uploadFileName) setUploadFileName(f.name);
+                    }
+                  }}
+                  className="w-full text-xs text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-border file:text-xs file:font-semibold file:bg-secondary file:text-foreground hover:file:bg-secondary/80 cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">File Category</label>
+                <select
+                  value={uploadFileCategory}
+                  onChange={(e) => setUploadFileCategory(e.target.value as FileCategory)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden cursor-pointer"
+                >
+                  <option value="document">Technical Document</option>
+                  <option value="asset">Design Asset</option>
+                  <option value="brand">Brand Asset & Vector</option>
+                  <option value="contract">Legal Agreement / Contract</option>
+                  <option value="raw_footage">Raw Media / Footage</option>
+                  <option value="export">Final Export / Archive</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Visibility Scope</label>
+                <select
+                  value={uploadFileVisibility}
+                  onChange={(e) => setUploadFileVisibility(e.target.value as Visibility)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden cursor-pointer"
+                >
+                  <option value="client">Client Visible (Available on client portal)</option>
+                  <option value="internal">Internal Team Only</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowUploadFileModal(false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isFileUploading}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {isFileUploading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Upload File
                 </button>
               </div>
             </form>
