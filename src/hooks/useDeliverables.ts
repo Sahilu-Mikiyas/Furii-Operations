@@ -104,10 +104,12 @@ export function useDeliverables(serviceId?: string, projectId?: string) {
   });
 
   const createDeliverableMutation = useMutation({
-    mutationFn: async (newDeliv: Partial<Deliverable>) => {
+    mutationFn: async (
+      newDeliv: Partial<Deliverable> & { file?: File | null; fileNotes?: string }
+    ) => {
       let orgId = newDeliv.organization_id;
       if (!orgId) {
-        const { data: org } = await supabase.from("organizations").select("id").limit(1).single();
+        const { data: org } = await supabase.from("organizations").select("id").limit(1).maybeSingle();
         orgId = org?.id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29";
       }
 
@@ -117,15 +119,49 @@ export function useDeliverables(serviceId?: string, projectId?: string) {
         service_id: newDeliv.service_id || null,
         client_id: newDeliv.client_id,
         name: newDeliv.name || (newDeliv as any).title || "Untitled Deliverable",
+        title: newDeliv.name || (newDeliv as any).title || "Untitled Deliverable",
         description: newDeliv.description || "",
-        status: newDeliv.status || "draft",
+        status: newDeliv.file ? "awaiting_review" : (newDeliv.status || "draft"),
         type: newDeliv.type || "Document",
+        category: (newDeliv as any).category || "document",
         current_version: 1,
         created_by: user?.id || null,
       };
 
       const { data, error } = await supabase.from("deliverables").insert(payload).select().single();
       if (error) throw error;
+
+      if (newDeliv.file && data?.id) {
+        try {
+          const file = newDeliv.file;
+          const fileExt = file.name.split(".").pop();
+          const filePath = `deliverables/${data.id}_v_1.${fileExt}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from("deliverables")
+            .upload(filePath, file, { upsert: true });
+
+          if (!uploadError) {
+            const { data: publicUrlData } = supabase.storage
+              .from("deliverables")
+              .getPublicUrl(filePath);
+
+            await supabase.from("deliverable_versions").insert({
+              deliverable_id: data.id,
+              organization_id: orgId,
+              version_number: 1,
+              file_url: publicUrlData.publicUrl,
+              file_name: file.name,
+              file_size: file.size,
+              notes: newDeliv.fileNotes || "Initial deliverable publication.",
+              uploaded_by: user?.id || null,
+            });
+          }
+        } catch (uploadErr) {
+          console.error("Initial deliverable file upload error:", uploadErr);
+        }
+      }
+
       return data;
     },
     onSuccess: () => {
@@ -171,5 +207,6 @@ export function useDeliverables(serviceId?: string, projectId?: string) {
     updateDeliverable: updateDeliverableMutation.mutateAsync,
     deleteDeliverable: deleteDeliverableMutation.mutateAsync,
     isUploading: uploadDeliverableMutation.isPending,
+    isCreating: createDeliverableMutation.isPending,
   };
 }

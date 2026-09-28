@@ -23,6 +23,7 @@ import {
   Scale,
   Plus,
   Download,
+  Upload,
   Loader2,
   Trash2,
   Edit3,
@@ -47,6 +48,9 @@ import type {
   MilestoneStatus,
   Task,
   Milestone,
+  Deliverable,
+  DeliverableStatus,
+  FileCategory,
   TaskStatus,
   TaskPriority,
   Visibility,
@@ -176,7 +180,15 @@ export function ProjectsPage() {
     deleteTask,
     isUpdating: isTaskUpdating,
   } = useTasks(selectedService?.id, selectedProject?.id);
-  const { deliverables } = useDeliverables(selectedService?.id, selectedProject?.id);
+  const {
+    deliverables,
+    createDeliverable,
+    uploadNewVersion,
+    updateDeliverable,
+    deleteDeliverable,
+    isUploading: isDeliverableUploading,
+    isCreating: isDeliverableCreating,
+  } = useDeliverables(selectedService?.id, selectedProject?.id);
   const { approvals } = useApprovals(targetClientId);
   const { workRecords, createWorkRecord, deleteWorkRecord, isCreating: isCreatingRecord } = useWorkRecords(selectedService?.id, selectedProject?.id);
   const { files } = useFiles(selectedProject?.client_id, selectedService?.id);
@@ -280,6 +292,27 @@ export function ProjectsPage() {
   const [recordTitle, setRecordTitle] = useState("");
   const [recordDesc, setRecordDesc] = useState("");
   const [recordChanges, setRecordChanges] = useState("");
+
+  // New Deliverable Form
+  const [showAddDeliverableModal, setShowAddDeliverableModal] = useState(false);
+  const [newDelivName, setNewDelivName] = useState("");
+  const [newDelivDesc, setNewDelivDesc] = useState("");
+  const [newDelivType, setNewDelivType] = useState("Document");
+  const [newDelivCategory, setNewDelivCategory] = useState<FileCategory>("pdf");
+  const [newDelivStatus, setNewDelivStatus] = useState<DeliverableStatus>("awaiting_review");
+  const [newDelivFile, setNewDelivFile] = useState<File | null>(null);
+  const [newDelivNotes, setNewDelivNotes] = useState("");
+
+  // Upload Revision Form
+  const [uploadDeliverableId, setUploadDeliverableId] = useState<string | null>(null);
+  const [revisionFile, setRevisionFile] = useState<File | null>(null);
+  const [revisionNotes, setRevisionNotes] = useState("");
+
+  // Edit Deliverable Form
+  const [editingDeliverable, setEditingDeliverable] = useState<Deliverable | null>(null);
+  const [editDelivName, setEditDelivName] = useState("");
+  const [editDelivDesc, setEditDelivDesc] = useState("");
+  const [editDelivStatus, setEditDelivStatus] = useState<DeliverableStatus>("draft");
 
   // Open Edit Project Modal
   const openEditProject = () => {
@@ -715,6 +748,101 @@ export function ProjectsPage() {
       toast.success("Work record deleted.");
     } catch (err: any) {
       toast.error(err.message || "Failed to delete record.");
+    }
+  };
+
+  // Deliverable Handlers
+  const handleCreateDeliverable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDelivName.trim() || !selectedProject) return;
+
+    try {
+      await createDeliverable({
+        organization_id: selectedProject.organization_id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
+        project_id: selectedProject.id,
+        service_id: selectedService?.id || null,
+        client_id: selectedProject.client_id,
+        name: newDelivName.trim(),
+        title: newDelivName.trim(),
+        description: newDelivDesc.trim(),
+        type: newDelivType,
+        category: newDelivCategory,
+        status: newDelivStatus,
+        file: newDelivFile,
+        fileNotes: newDelivNotes || "Initial version submitted.",
+      });
+
+      toast.success(`Deliverable "${newDelivName}" published successfully.`);
+      setNewDelivName("");
+      setNewDelivDesc("");
+      setNewDelivType("Document");
+      setNewDelivCategory("pdf");
+      setNewDelivStatus("awaiting_review");
+      setNewDelivFile(null);
+      setNewDelivNotes("");
+      setShowAddDeliverableModal(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to publish deliverable.");
+    }
+  };
+
+  const handleUploadRevision = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadDeliverableId || !revisionFile) return;
+
+    try {
+      await uploadNewVersion({
+        deliverableId: uploadDeliverableId,
+        file: revisionFile,
+        notes: revisionNotes || "Updated revision uploaded.",
+      });
+
+      toast.success("New revision uploaded and submitted for review.");
+      setUploadDeliverableId(null);
+      setRevisionFile(null);
+      setRevisionNotes("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload revision.");
+    }
+  };
+
+  const handleOpenEditDeliverable = (deliv: Deliverable) => {
+    setEditingDeliverable(deliv);
+    setEditDelivName(deliv.name || (deliv as any).title || "");
+    setEditDelivDesc(deliv.description || "");
+    setEditDelivStatus(deliv.status);
+  };
+
+  const handleUpdateDeliverable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDeliverable) return;
+
+    try {
+      await updateDeliverable({
+        id: editingDeliverable.id,
+        updates: {
+          name: editDelivName.trim(),
+          title: editDelivName.trim(),
+          description: editDelivDesc.trim(),
+          status: editDelivStatus,
+        },
+      });
+
+      toast.success("Deliverable updated successfully.");
+      setEditingDeliverable(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update deliverable.");
+    }
+  };
+
+  const handleDeleteDeliverable = async (id: string, name: string) => {
+    if (!window.confirm(`Delete deliverable "${name}"? This action cannot be undone.`)) return;
+
+    try {
+      await deleteDeliverable(id);
+      toast.success(`Deliverable "${name}" deleted.`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete deliverable.");
     }
   };
 
@@ -1600,24 +1728,101 @@ export function ProjectsPage() {
 
             {activeTab === "deliverables" && (
               <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Published Deliverables</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Client-facing outputs, creative assets, code repos, and version histories for executive sign-off.
+                    </p>
+                  </div>
+                  {isManager && (
+                    <button
+                      onClick={() => setShowAddDeliverableModal(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer self-start sm:self-auto shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Publish Deliverable
+                    </button>
+                  )}
+                </div>
+
                 {deliverables.length === 0 ? (
-                  <div className="p-8 text-center bg-card rounded-xl border border-dashed border-border text-xs text-muted-foreground">
-                    No deliverables published for this service yet.
+                  <div className="p-12 text-center bg-card rounded-2xl border border-dashed border-border space-y-3">
+                    <FileCheck2 className="w-8 h-8 text-muted-foreground mx-auto" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-foreground">No deliverables published yet</p>
+                      <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                        Publish technical documents, design vectors, staging URLs, or media exports for this service.
+                      </p>
+                    </div>
+                    {isManager && (
+                      <button
+                        onClick={() => setShowAddDeliverableModal(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Publish First Deliverable
+                      </button>
+                    )}
                   </div>
                 ) : (
                   deliverables.map((deliv) => (
                     <div key={deliv.id} className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="text-[10px] font-mono uppercase bg-primary/10 text-primary font-bold px-2 py-0.5 rounded">
-                            Deliverable v{deliv.current_version}
-                          </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-mono uppercase bg-primary/10 text-primary font-bold px-2 py-0.5 rounded">
+                              Deliverable v{deliv.current_version}
+                            </span>
+                            <span className="text-[10px] font-mono uppercase bg-secondary px-2 py-0.5 rounded text-muted-foreground font-semibold border border-border">
+                              {deliv.type || deliv.category || "Asset"}
+                            </span>
+                          </div>
                           <h4 className="text-base font-bold text-foreground mt-1">{deliv.name || deliv.title}</h4>
-                          <p className="text-xs text-muted-foreground">{deliv.description}</p>
+                          {deliv.description && (
+                            <p className="text-xs text-muted-foreground leading-relaxed">{deliv.description}</p>
+                          )}
                         </div>
-                        <StatusBadge status={deliv.status} />
+
+                        <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                          <StatusBadge status={deliv.status} />
+
+                          {isManager && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setUploadDeliverableId(deliv.id);
+                                  setRevisionFile(null);
+                                  setRevisionNotes("");
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary text-foreground hover:bg-secondary/80 border border-border transition-colors cursor-pointer"
+                                title="Upload new version"
+                              >
+                                <Upload className="w-3.5 h-3.5 text-primary" />
+                                <span>Upload Revision</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleOpenEditDeliverable(deliv)}
+                                className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                                title="Edit deliverable info"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                onClick={() => handleDeleteDeliverable(deliv.id, deliv.name || deliv.title || "Deliverable")}
+                                className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                title="Delete deliverable"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
 
+                      {/* Versions list */}
                       {deliv.versions && deliv.versions.length > 0 && (
                         <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/70 space-y-2">
                           <span className="text-[11px] font-mono font-bold uppercase text-muted-foreground block">
@@ -1625,17 +1830,17 @@ export function ProjectsPage() {
                           </span>
                           <div className="space-y-2">
                             {deliv.versions.map((ver: any) => (
-                              <div key={ver.id} className="flex items-center justify-between text-xs bg-card p-2 rounded-lg border border-border/60">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono font-bold text-primary">v{ver.version_number}</span>
-                                  <span className="font-mono text-foreground font-medium">{ver.file_name}</span>
-                                  {ver.notes && <span className="text-muted-foreground italic">— {ver.notes}</span>}
+                              <div key={ver.id} className="flex items-center justify-between text-xs bg-card p-2.5 rounded-lg border border-border/60">
+                                <div className="flex items-center gap-2 truncate min-w-0 pr-2">
+                                  <span className="font-mono font-bold text-primary shrink-0">v{ver.version_number}</span>
+                                  <span className="font-mono text-foreground font-medium truncate">{ver.file_name}</span>
+                                  {ver.notes && <span className="text-muted-foreground italic truncate">— {ver.notes}</span>}
                                 </div>
                                 <a
                                   href={ver.file_url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground font-medium text-[11px] flex items-center gap-1 transition-colors border border-border"
+                                  className="px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground font-medium text-[11px] flex items-center gap-1 transition-colors border border-border shrink-0 cursor-pointer"
                                 >
                                   <Download className="w-3 h-3" />
                                   Download
@@ -2761,6 +2966,272 @@ export function ProjectsPage() {
                   className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer"
                 >
                   Save Milestone
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Publish Deliverable Modal */}
+      {showAddDeliverableModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">Publish Deliverable</h2>
+                <p className="text-xs text-muted-foreground">
+                  Workspace: {selectedService ? selectedService.name : selectedProject?.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAddDeliverableModal(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateDeliverable} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Deliverable Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={newDelivName}
+                  onChange={(e) => setNewDelivName(e.target.value)}
+                  placeholder="e.g. Brand Identity Vector Suite & Typography Spec"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Deliverable Type</label>
+                  <select
+                    value={newDelivType}
+                    onChange={(e) => setNewDelivType(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden cursor-pointer"
+                  >
+                    <option value="Document">Document / PDF</option>
+                    <option value="Design">Design / Vector</option>
+                    <option value="Video">Video / Master Cut</option>
+                    <option value="Presentation">Presentation / Deck</option>
+                    <option value="Audio">Audio / Sound Track</option>
+                    <option value="Code">Software / Code Package</option>
+                    <option value="Archive">Archive / Assets ZIP</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Initial Status</label>
+                  <select
+                    value={newDelivStatus}
+                    onChange={(e) => setNewDelivStatus(e.target.value as DeliverableStatus)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden cursor-pointer"
+                  >
+                    <option value="awaiting_review">Awaiting Client Review</option>
+                    <option value="draft">Internal Draft</option>
+                    <option value="approved">Approved</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Scope Description</label>
+                <textarea
+                  rows={2}
+                  value={newDelivDesc}
+                  onChange={(e) => setNewDelivDesc(e.target.value)}
+                  placeholder="Technical specs, Amharic/English typography details, or playback notes..."
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden resize-none"
+                />
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-secondary/20 border border-border/80 space-y-2">
+                <label className="block text-xs font-semibold text-foreground">
+                  Initial File Upload (Optional)
+                </label>
+                <input
+                  type="file"
+                  onChange={(e) => setNewDelivFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                />
+                {newDelivFile && (
+                  <div className="pt-1">
+                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">
+                      Version 1 Notes
+                    </label>
+                    <input
+                      type="text"
+                      value={newDelivNotes}
+                      onChange={(e) => setNewDelivNotes(e.target.value)}
+                      placeholder="e.g. Master release v1.0 signed by creative director"
+                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-border bg-card text-foreground focus:outline-hidden"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddDeliverableModal(false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeliverableCreating}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
+                >
+                  {isDeliverableCreating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Publish Deliverable
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Upload Deliverable Revision Modal */}
+      {uploadDeliverableId && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">Upload Revision</h2>
+                <p className="text-xs text-muted-foreground">Upload an updated file version for this deliverable.</p>
+              </div>
+              <button
+                onClick={() => setUploadDeliverableId(null)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUploadRevision} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Select Revised File *</label>
+                <input
+                  type="file"
+                  required
+                  onChange={(e) => setRevisionFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Changelog / Revision Notes</label>
+                <textarea
+                  rows={2}
+                  required
+                  value={revisionNotes}
+                  onChange={(e) => setRevisionNotes(e.target.value)}
+                  placeholder="e.g. Addressed client feedback on color palette contrast..."
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden resize-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUploadDeliverableId(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeliverableUploading || !revisionFile}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
+                >
+                  {isDeliverableUploading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Upload Revision
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit Deliverable Modal */}
+      {editingDeliverable && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Edit Deliverable</h2>
+              <button
+                onClick={() => setEditingDeliverable(null)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateDeliverable} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editDelivName}
+                  onChange={(e) => setEditDelivName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={editDelivDesc}
+                  onChange={(e) => setEditDelivDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Status</label>
+                <select
+                  value={editDelivStatus}
+                  onChange={(e) => setEditDelivStatus(e.target.value as DeliverableStatus)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden cursor-pointer"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="awaiting_review">Awaiting Review</option>
+                  <option value="approved">Approved</option>
+                  <option value="changes_requested">Changes Requested</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingDeliverable(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>
