@@ -103,10 +103,73 @@ export function useDeliverables(serviceId?: string, projectId?: string) {
     },
   });
 
+  const createDeliverableMutation = useMutation({
+    mutationFn: async (newDeliv: Partial<Deliverable>) => {
+      let orgId = newDeliv.organization_id;
+      if (!orgId) {
+        const { data: org } = await supabase.from("organizations").select("id").limit(1).single();
+        orgId = org?.id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29";
+      }
+
+      const payload = {
+        organization_id: orgId,
+        project_id: newDeliv.project_id,
+        service_id: newDeliv.service_id || null,
+        client_id: newDeliv.client_id,
+        name: newDeliv.name || (newDeliv as any).title || "Untitled Deliverable",
+        description: newDeliv.description || "",
+        status: newDeliv.status || "draft",
+        type: newDeliv.type || "Document",
+        current_version: 1,
+        created_by: user?.id || null,
+      };
+
+      const { data, error } = await supabase.from("deliverables").insert(payload).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deliverables"] });
+      queryClient.invalidateQueries({ queryKey: ["approvals"] });
+    },
+  });
+
+  const updateDeliverableMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Deliverable> }) => {
+      const { data, error } = await supabase
+        .from("deliverables")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deliverables"] });
+      queryClient.invalidateQueries({ queryKey: ["approvals"] });
+    },
+  });
+
+  const deleteDeliverableMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("deliverables").delete().eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deliverables"] });
+      queryClient.invalidateQueries({ queryKey: ["approvals"] });
+    },
+  });
+
   return {
     ...query,
     deliverables: query.data || [],
     uploadNewVersion: uploadDeliverableMutation.mutateAsync,
+    createDeliverable: createDeliverableMutation.mutateAsync,
+    updateDeliverable: updateDeliverableMutation.mutateAsync,
+    deleteDeliverable: deleteDeliverableMutation.mutateAsync,
     isUploading: uploadDeliverableMutation.isPending,
   };
 }
