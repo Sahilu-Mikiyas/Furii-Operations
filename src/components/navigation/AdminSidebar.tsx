@@ -41,7 +41,12 @@ const ADMIN_NAV = [
   { label: "Agency Settings", href: "/admin/settings", icon: Settings },
 ];
 
-export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
+export function AdminSidebar({
+  isOpen,
+  onClose,
+  isCollapsed,
+  onToggleCollapse,
+}: AdminSidebarProps) {
   const { user, role, signOut } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
