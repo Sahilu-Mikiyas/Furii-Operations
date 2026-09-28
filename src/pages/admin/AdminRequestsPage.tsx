@@ -26,8 +26,11 @@ import {
   ExternalLink,
   ChevronDown,
   Filter,
+  ShieldCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ReceiptInvoiceModal } from "@/components/shared/ReceiptInvoiceModal";
+import type { ReceiptPdfData } from "@/lib/invoicePdfGenerator";
 
 export function AdminRequestsPage() {
   const { currency } = useAuth();
@@ -75,6 +78,70 @@ export function AdminRequestsPage() {
   // Deletion / Wipe Confirmation States
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [wipeTargetClient, setWipeTargetClient] = useState<{ id: string; name: string } | null>(null);
+
+  // Receipt Modal State
+  const [selectedReceiptData, setSelectedReceiptData] = useState<ReceiptPdfData | null>(null);
+  const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+
+  const handleOpenReceipt = (req: ServiceRequest) => {
+    const client = clients.find((c) => c.id === req.client_id) || req.client;
+    const receiptNum = `FURII-REC-${req.id.slice(0, 8).toUpperCase()}`;
+
+    let receiptItems = [
+      {
+        description: req.title,
+        category: req.request_type ? `${req.request_type.toUpperCase()} SCOPE` : "Commissioned Service",
+        quantity: 1,
+        unitPrice: Number(req.estimated_total) || 0,
+        total: Number(req.estimated_total) || 0,
+      },
+    ];
+
+    if (req.catalog_items && Array.isArray(req.catalog_items) && req.catalog_items.length > 0) {
+      receiptItems = req.catalog_items.map((catItem: any) => ({
+        description: catItem.name || catItem.title || catItem.description || "Scope Deliverable",
+        category: catItem.category || req.request_type || "Scope Item",
+        quantity: 1,
+        unitPrice: Number(catItem.price || catItem.cost || req.estimated_total / req.catalog_items.length),
+        total: Number(catItem.price || catItem.cost || req.estimated_total / req.catalog_items.length),
+      }));
+    }
+
+    const isPaid = req.status === "approved" || req.status === "converted";
+
+    const data: ReceiptPdfData = {
+      receiptNumber: receiptNum,
+      issueDate: formatDate(req.created_at),
+      approvalDate: req.updated_at ? formatDate(req.updated_at) : formatDate(new Date().toISOString()),
+      client: {
+        name: client?.name || "Client Partner",
+        company: client?.company || client?.name || "Client Organization",
+        email: client?.email || undefined,
+        phone: client?.phone || undefined,
+      },
+      projectTitle: req.title,
+      serviceType: req.request_type,
+      description: req.description || "Authorized engagement stream with Furii Operations.",
+      items: receiptItems,
+      currency: (req.currency as "ETB" | "USD") || "ETB",
+      subtotal: Number(req.estimated_total) || 0,
+      totalAmount: Number(req.estimated_total) || 0,
+      amountPaid: isPaid ? Number(req.estimated_total) || 0 : 0,
+      paymentMethod: req.payment_notes?.toLowerCase().includes("telebirr")
+        ? "Telebirr Electronic Money"
+        : req.payment_notes?.toLowerCase().includes("cbe")
+        ? "CBE Birr / Commercial Bank of Ethiopia"
+        : "Bank Wire Transfer",
+      paymentReference: req.payment_notes || `REQ-${req.id.slice(0, 8).toUpperCase()}`,
+      paymentDate: req.payment_submitted_at ? formatDate(req.payment_submitted_at) : formatDate(req.created_at),
+      verifiedBy: "Furii Operations & Finance",
+    };
+
+    setSelectedReceiptData(data);
+    setSelectedReceiptUrl(req.receipt_url || null);
+    setIsReceiptModalOpen(true);
+  };
 
   // Quick preset catalog options
   const CATALOG_PRESETS: { title: string; type: ServiceRequestType; price: number }[] = [
@@ -530,9 +597,32 @@ export function AdminRequestsPage() {
                     )}
 
                     {isApproved && (
-                      <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20 flex items-center gap-1">
-                        ✓ Live in Ongoing Stream
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20 flex items-center gap-1">
+                          ✓ Live in Ongoing Stream
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReceipt(req)}
+                          className="px-3 py-1 bg-secondary hover:bg-secondary/80 text-foreground border border-border text-xs font-semibold rounded-lg transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                          title="Generate and view official PDF receipt & invoice"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>PDF Receipt</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {!isApproved && (req.receipt_url || req.status === "payment_review") && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReceipt(req)}
+                        className="px-2.5 py-1 bg-secondary hover:bg-secondary/80 text-foreground border border-border text-xs font-semibold rounded-lg transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                        title="Preview generated invoice and payment receipt"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Preview Invoice</span>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -942,6 +1032,14 @@ export function AdminRequestsPage() {
           </motion.div>
         </div>
       )}
+
+      {/* Official Receipt & Settled Invoice Modal */}
+      <ReceiptInvoiceModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        data={selectedReceiptData}
+        originalReceiptUrl={selectedReceiptUrl}
+      />
     </div>
   );
 }

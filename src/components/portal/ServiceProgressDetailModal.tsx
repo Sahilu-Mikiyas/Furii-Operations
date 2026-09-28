@@ -38,6 +38,9 @@ import { CURATED_PACKAGES } from "@/data/catalog";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useChecklists } from "@/hooks/useChecklists";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
+import { ReceiptInvoiceModal } from "@/components/shared/ReceiptInvoiceModal";
+import type { ReceiptPdfData } from "@/lib/invoicePdfGenerator";
 
 interface ServiceProgressDetailModalProps {
   service: Service | null;
@@ -117,6 +120,10 @@ export function ServiceProgressDetailModal({
     );
   }, [deliverables, service]);
 
+  const { currentClient } = useAuth();
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [receiptPdfData, setReceiptPdfData] = useState<ReceiptPdfData | null>(null);
+
   // Invoices & financial progress
   const projectInvoices = useMemo(() => {
     if (!service) return [];
@@ -125,6 +132,48 @@ export function ServiceProgressDetailModal({
 
   const totalBilled = projectInvoices.reduce((acc, i) => acc + (i.total || 0), 0);
   const totalPaid = projectInvoices.reduce((acc, i) => acc + (i.amount_paid || 0), 0);
+
+  const handleOpenReceipt = () => {
+    if (!service) return;
+    const inv = projectInvoices[0];
+    const amount = totalPaid || service.project?.budget || 0;
+    const receiptNum = inv ? `FURII-${inv.invoice_number}` : `FURII-REC-${service.id.slice(0, 8).toUpperCase()}`;
+
+    const data: ReceiptPdfData = {
+      receiptNumber: receiptNum,
+      issueDate: formatDate(service.start_date || new Date().toISOString()),
+      approvalDate: formatDate(new Date().toISOString()),
+      client: {
+        name: currentClient?.name || "Client Partner",
+        company: currentClient?.company || currentClient?.name || "Client Organization",
+        email: currentClient?.email || undefined,
+        phone: currentClient?.phone || undefined,
+      },
+      projectTitle: service.name,
+      serviceType: service.service_type,
+      description: service.description || "Active authorized service delivery stream with Furii Operations.",
+      items: [
+        {
+          description: service.name,
+          category: service.service_type ? `${service.service_type.toUpperCase()} SCOPE` : "Delivery Stream",
+          quantity: 1,
+          unitPrice: Number(amount),
+          total: Number(amount),
+        },
+      ],
+      currency: (currency as "ETB" | "USD") || "ETB",
+      subtotal: Number(amount),
+      totalAmount: Number(amount),
+      amountPaid: Number(amount),
+      paymentMethod: "Electronic Wire / Bank Clearance",
+      paymentReference: `REC-${service.id.slice(0, 8).toUpperCase()}`,
+      paymentDate: formatDate(service.start_date || new Date().toISOString()),
+      verifiedBy: "Furii Operations & Finance",
+    };
+
+    setReceiptPdfData(data);
+    setIsReceiptModalOpen(true);
+  };
 
   // Match catalog package if applicable
   const matchedPackage = useMemo(() => {
@@ -359,10 +408,23 @@ export function ServiceProgressDetailModal({
                 </span>
               )}
             </div>
-            <div className="text-[10px] text-muted-foreground font-mono">
-              {totalBilled > totalPaid
-                ? `${formatCurrency(totalBilled - totalPaid, currency)} Remaining`
-                : "Fully Settled"}
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+              <span>
+                {totalBilled > totalPaid
+                  ? `${formatCurrency(totalBilled - totalPaid, currency)} Remaining`
+                  : "Fully Settled"}
+              </span>
+              {(totalPaid > 0 || (service.project?.budget && service.project.budget > 0)) && (
+                <button
+                  type="button"
+                  onClick={handleOpenReceipt}
+                  className="inline-flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 font-bold underline cursor-pointer"
+                  title="View and download official payment receipt PDF"
+                >
+                  <ShieldCheck className="w-3 h-3" />
+                  PDF Receipt
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1007,6 +1069,13 @@ export function ServiceProgressDetailModal({
           </div>
         </div>
       </motion.div>
+
+      {/* Official Receipt & Settled Invoice Modal */}
+      <ReceiptInvoiceModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        data={receiptPdfData}
+      />
     </div>
   );
 }

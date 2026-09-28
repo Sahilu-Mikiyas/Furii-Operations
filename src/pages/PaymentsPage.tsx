@@ -14,10 +14,13 @@ import {
   Trash2,
   X,
   Receipt,
+  ShieldCheck,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import type { PaymentMethod } from "@/types";
+import type { PaymentMethod, Invoice, Payment } from "@/types";
+import { ReceiptInvoiceModal } from "@/components/shared/ReceiptInvoiceModal";
+import type { ReceiptPdfData } from "@/lib/invoicePdfGenerator";
 
 export function PaymentsPage() {
   const { currency, setCurrency, role, currentClient } = useAuth();
@@ -57,6 +60,105 @@ export function PaymentsPage() {
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<PaymentMethod>("bank_transfer");
   const [payRef, setPayRef] = useState("");
+
+  // Receipt & Invoice Modal State
+  const [selectedReceiptData, setSelectedReceiptData] = useState<ReceiptPdfData | null>(null);
+  const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+
+  const handleOpenInvoicePdf = (inv: Invoice) => {
+    const client = clients.find((c) => c.id === inv.client_id) || inv.client;
+    const project = projects.find((p) => p.id === inv.project_id);
+
+    const items = inv.items && inv.items.length > 0
+      ? inv.items.map((it) => ({
+          description: it.description,
+          category: "Invoice Line Item",
+          quantity: it.quantity,
+          unitPrice: it.unit_price,
+          total: it.total,
+        }))
+      : [
+          {
+            description: inv.title || `Invoice ${inv.invoice_number}`,
+            category: "Deliverable",
+            quantity: 1,
+            unitPrice: Number(inv.total || inv.amount),
+            total: Number(inv.total || inv.amount),
+          },
+        ];
+
+    const data: ReceiptPdfData = {
+      receiptNumber: `FURII-${inv.invoice_number}`,
+      invoiceNumber: inv.invoice_number,
+      issueDate: formatDate(inv.created_at),
+      approvalDate: formatDate(inv.updated_at || inv.created_at),
+      client: {
+        name: client?.name || "Client Partner",
+        company: client?.company || client?.name || "Client Organization",
+        email: client?.email || undefined,
+        phone: client?.phone || undefined,
+      },
+      projectTitle: project?.name || inv.title || `Invoice ${inv.invoice_number}`,
+      serviceType: "Commercial Engagement",
+      description: inv.notes || "Official agency tax invoice and payment record.",
+      items,
+      currency: (inv.currency as "ETB" | "USD") || "ETB",
+      subtotal: Number(inv.subtotal || inv.total || inv.amount),
+      taxAmount: Number(inv.tax_amount || 0),
+      totalAmount: Number(inv.total || inv.amount),
+      amountPaid: Number(inv.amount_paid || 0),
+      paymentMethod: "Electronic Wire / Bank Clearance",
+      paymentReference: `INV-${inv.invoice_number}`,
+      paymentDate: inv.due_date ? formatDate(inv.due_date) : undefined,
+      verifiedBy: "Furii Operations & Finance",
+    };
+
+    setSelectedReceiptData(data);
+    setSelectedReceiptUrl(null);
+    setIsReceiptModalOpen(true);
+  };
+
+  const handleOpenPaymentPdf = (pay: Payment) => {
+    const client = clients.find((c) => c.id === pay.client_id) || pay.client;
+    const project = projects.find((p) => p.id === pay.project_id);
+
+    const data: ReceiptPdfData = {
+      receiptNumber: `FURII-PAY-${pay.id.slice(0, 8).toUpperCase()}`,
+      issueDate: formatDate(pay.payment_date),
+      approvalDate: formatDate(pay.created_at),
+      client: {
+        name: client?.name || "Client Partner",
+        company: client?.company || client?.name || "Client Organization",
+        email: client?.email || undefined,
+        phone: client?.phone || undefined,
+      },
+      projectTitle: project?.name || pay.reference || "Verified Agency Payment",
+      serviceType: "Payment Settlement",
+      description: pay.notes || "Verified wire transfer payment settlement.",
+      items: [
+        {
+          description: pay.reference || `Settlement Payment #${pay.id.slice(0, 8)}`,
+          category: pay.method.replace("_", " ").toUpperCase(),
+          quantity: 1,
+          unitPrice: Number(pay.amount),
+          total: Number(pay.amount),
+        },
+      ],
+      currency: (pay.currency as "ETB" | "USD") || "ETB",
+      subtotal: Number(pay.amount),
+      totalAmount: Number(pay.amount),
+      amountPaid: Number(pay.amount),
+      paymentMethod: pay.method.replace("_", " ").toUpperCase(),
+      paymentReference: pay.reference || undefined,
+      paymentDate: formatDate(pay.payment_date),
+      verifiedBy: "Furii Operations & Finance",
+    };
+
+    setSelectedReceiptData(data);
+    setSelectedReceiptUrl(pay.receipt_url || null);
+    setIsReceiptModalOpen(true);
+  };
 
   const totalContract = projects.reduce((acc, p) => acc + Number(p.budget || 0), 0);
   const totalPaid = invoices
@@ -292,6 +394,15 @@ export function PaymentsPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenInvoicePdf(inv)}
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer flex items-center gap-1"
+                        title="View and download PDF invoice / receipt"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>PDF</span>
+                      </button>
+
                       {!isPaid && isManager && (
                         <button
                           onClick={() => {
@@ -340,10 +451,20 @@ export function PaymentsPage() {
                     {formatDate(pay.payment_date)} • Method: {pay.method.replace("_", " ")}
                   </p>
                 </div>
-                <div className="text-right">
-                  <span className="font-mono font-bold text-emerald-600">
-                    +{formatCurrency(pay.amount, currency)}
-                  </span>
+                <div className="flex items-center gap-3 text-right">
+                  <div>
+                    <span className="font-mono font-bold text-emerald-600 block">
+                      +{formatCurrency(pay.amount, currency)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleOpenPaymentPdf(pay)}
+                    className="p-1.5 rounded-lg border border-border bg-secondary/50 hover:bg-secondary text-foreground text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                    title="Download official receipt PDF"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Receipt</span>
+                  </button>
                 </div>
               </div>
             ))}
@@ -598,6 +719,14 @@ export function PaymentsPage() {
           </motion.div>
         </div>
       )}
+
+      {/* Official Receipt & Settled Invoice Modal */}
+      <ReceiptInvoiceModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        data={selectedReceiptData}
+        originalReceiptUrl={selectedReceiptUrl}
+      />
     </motion.div>
   );
 }

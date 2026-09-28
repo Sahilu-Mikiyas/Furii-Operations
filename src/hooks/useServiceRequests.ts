@@ -292,7 +292,51 @@ export function useServiceRequests(clientId?: string) {
         },
       ]);
 
-      // 6. Mark Service Request as 'approved'
+      // 6. Create settled Invoice & Payment record for official accounting
+      try {
+        const invNum = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+        const { data: inv } = await supabase
+          .from("invoices")
+          .insert({
+            organization_id: orgId,
+            client_id: request.client_id,
+            project_id: project.id,
+            invoice_number: invNum,
+            title: request.title,
+            total: request.estimated_total,
+            amount: request.estimated_total,
+            amount_paid: request.estimated_total,
+            currency: request.currency || "ETB",
+            due_date: new Date().toISOString().split("T")[0],
+            notes: request.description || `Settled engagement for ${request.title}`,
+            status: "paid",
+          })
+          .select()
+          .single();
+
+        if (inv) {
+          // Record payment
+          await supabase.from("payments").insert({
+            organization_id: orgId,
+            client_id: request.client_id,
+            project_id: project.id,
+            invoice_id: inv.id,
+            amount: request.estimated_total,
+            currency: request.currency || "ETB",
+            payment_date: request.payment_submitted_at
+              ? request.payment_submitted_at.split("T")[0]
+              : new Date().toISOString().split("T")[0],
+            method: "bank_transfer",
+            reference: request.payment_notes || `REC-${request.id.slice(0, 8).toUpperCase()}`,
+            receipt_url: request.receipt_url || null,
+            notes: "Verified & cleared upon service launch",
+          });
+        }
+      } catch (finErr) {
+        console.warn("Auto-ledger sync note:", finErr);
+      }
+
+      // 7. Mark Service Request as 'approved'
       const { error: reqUpdateError } = await supabase
         .from("service_requests")
         .update({
@@ -312,6 +356,8 @@ export function useServiceRequests(clientId?: string) {
       queryClient.invalidateQueries({ queryKey: ["services"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["milestones"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
     },
   });
 

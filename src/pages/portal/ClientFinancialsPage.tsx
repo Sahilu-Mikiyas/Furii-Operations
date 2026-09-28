@@ -19,8 +19,11 @@ import {
   Layers,
   DollarSign,
   Plus,
+  Download,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { ReceiptInvoiceModal } from "@/components/shared/ReceiptInvoiceModal";
+import type { ReceiptPdfData } from "@/lib/invoicePdfGenerator";
 
 export function ClientFinancialsPage() {
   const navigate = useNavigate();
@@ -42,6 +45,11 @@ export function ClientFinancialsPage() {
   const { projects, isLoading: projectsLoading } = useProjects(clientId);
 
   const [filter, setFilter] = useState<"all" | "paid" | "outstanding">("all");
+
+  // Receipt Modal State
+  const [selectedReceiptData, setSelectedReceiptData] = useState<ReceiptPdfData | null>(null);
+  const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
   const isLoading = invoicesLoading || requestsLoading || projectsLoading;
 
@@ -66,6 +74,9 @@ export function ClientFinancialsPage() {
         status: "paid";
         receipt_url?: string | null;
         isProject?: boolean;
+        rawRequest?: any;
+        rawProject?: any;
+        rawInvoice?: any;
       }> = [];
 
       const outstanding: Array<{
@@ -94,6 +105,7 @@ export function ClientFinancialsPage() {
           amount: Number(req.estimated_total) || 0,
           status: "paid",
           receipt_url: req.receipt_url,
+          rawRequest: req,
         });
       });
 
@@ -114,6 +126,7 @@ export function ClientFinancialsPage() {
             amount: Number(proj.budget),
             status: "paid",
             isProject: true,
+            rawProject: proj,
           });
         }
       });
@@ -129,6 +142,7 @@ export function ClientFinancialsPage() {
             date: inv.created_at,
             amount: amt,
             status: "paid",
+            rawInvoice: inv,
           });
         }
       });
@@ -194,6 +208,78 @@ export function ClientFinancialsPage() {
     if (filter === "outstanding") return outstandingItems;
     return allLedgerItems;
   }, [filter, paidItems, outstandingItems, allLedgerItems]);
+
+  const handleOpenReceipt = (item: any) => {
+    const rawReq = item.rawRequest;
+    const rawInv = item.rawInvoice;
+    const rawProj = item.rawProject;
+
+    const receiptNum = rawReq
+      ? `FURII-REC-${rawReq.id.slice(0, 8).toUpperCase()}`
+      : rawInv
+      ? `FURII-${rawInv.invoice_number}`
+      : `FURII-REC-${item.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase()}`;
+
+    let receiptItems = [
+      {
+        description: item.title,
+        category: item.type,
+        quantity: 1,
+        unitPrice: item.amount,
+        total: item.amount,
+      },
+    ];
+
+    if (rawReq?.catalog_items && Array.isArray(rawReq.catalog_items) && rawReq.catalog_items.length > 0) {
+      receiptItems = rawReq.catalog_items.map((catItem: any) => ({
+        description: catItem.name || catItem.title || catItem.description || "Scope Deliverable",
+        category: catItem.category || item.type,
+        quantity: 1,
+        unitPrice: Number(catItem.price || catItem.cost || item.amount / rawReq.catalog_items.length),
+        total: Number(catItem.price || catItem.cost || item.amount / rawReq.catalog_items.length),
+      }));
+    } else if (rawInv?.items && Array.isArray(rawInv.items) && rawInv.items.length > 0) {
+      receiptItems = rawInv.items.map((invItem: any) => ({
+        description: invItem.description || "Invoice Item",
+        category: "Deliverable",
+        quantity: Number(invItem.quantity || 1),
+        unitPrice: Number(invItem.unit_price || 0),
+        total: Number(invItem.total || 0),
+      }));
+    }
+
+    const data: ReceiptPdfData = {
+      receiptNumber: receiptNum,
+      issueDate: formatDate(item.date),
+      approvalDate: formatDate(item.date),
+      client: {
+        name: currentClient?.name || "Client Partner",
+        company: currentClient?.company || currentClient?.name || "Client Organization",
+        email: currentClient?.email || undefined,
+        phone: currentClient?.phone || undefined,
+      },
+      projectTitle: item.title,
+      serviceType: item.type,
+      description: rawReq?.description || rawProj?.description || "Authorized engagement stream with Furii Operations.",
+      items: receiptItems,
+      currency: "ETB",
+      subtotal: item.amount,
+      totalAmount: item.amount,
+      amountPaid: item.amount,
+      paymentMethod: rawReq?.payment_notes?.toLowerCase().includes("telebirr")
+        ? "Telebirr Electronic Money"
+        : rawReq?.payment_notes?.toLowerCase().includes("cbe")
+        ? "CBE Birr / Commercial Bank of Ethiopia"
+        : "Bank Wire Transfer",
+      paymentReference: rawReq?.payment_notes || `TX-${receiptNum}`,
+      paymentDate: formatDate(item.date),
+      verifiedBy: "Furii Operations & Finance",
+    };
+
+    setSelectedReceiptData(data);
+    setSelectedReceiptUrl(item.receipt_url || null);
+    setIsReceiptModalOpen(true);
+  };
 
   return (
     <motion.div
@@ -415,13 +501,24 @@ export function ClientFinancialsPage() {
                       )}
 
                       {isPaid && (
-                        <button
-                          onClick={() => navigate("/portal/services?tab=ongoing")}
-                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer flex items-center gap-1"
-                        >
-                          <span>View Service</span>
-                          <ArrowRight className="w-3 h-3" />
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handleOpenReceipt(item)}
+                            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                            title="View and download official receipt / settled invoice"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Official Receipt</span>
+                          </button>
+
+                          <button
+                            onClick={() => navigate("/portal/services?tab=ongoing")}
+                            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>View Service</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -431,6 +528,14 @@ export function ClientFinancialsPage() {
           </div>
         )}
       </div>
+
+      {/* Official Receipt & Settled Invoice Modal */}
+      <ReceiptInvoiceModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        data={selectedReceiptData}
+        originalReceiptUrl={selectedReceiptUrl}
+      />
     </motion.div>
   );
 }
