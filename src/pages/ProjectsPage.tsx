@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/lib/auth";
 import { useProjects } from "@/hooks/useProjects";
 import { useServices } from "@/hooks/useServices";
@@ -12,7 +12,7 @@ import { useMilestones } from "@/hooks/useMilestones";
 import { useDecisions } from "@/hooks/useDecisions";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatCurrency } from "@/lib/utils";
 import {
   Layers,
   CheckCircle2,
@@ -27,10 +27,71 @@ import {
   Trash2,
   Edit3,
   X,
+  Building2,
+  ListTodo,
+  Calendar,
+  AlertCircle,
+  Clock,
+  Zap,
+  ArrowRight,
+  Check,
+  Search,
+  Filter,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import type { ServiceType, ServiceStatus, ProjectStatus, MilestoneStatus } from "@/types";
+import type {
+  ServiceType,
+  ServiceStatus,
+  ProjectStatus,
+  MilestoneStatus,
+  Task,
+  Milestone,
+  TaskStatus,
+  TaskPriority,
+  Visibility,
+} from "@/types";
+
+export interface SubtaskItem {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
+export function parseSubtasks(desc?: string | null): { cleanDesc: string; subtasks: SubtaskItem[] } {
+  if (!desc) return { cleanDesc: "", subtasks: [] };
+  const lines = desc.split("\n");
+  const subtasks: SubtaskItem[] = [];
+  const descLines: string[] = [];
+
+  lines.forEach((line, idx) => {
+    const doneMatch = line.match(/^[-*]\s+\[([ xX])\]\s+(.*)$/);
+    if (doneMatch) {
+      subtasks.push({
+        id: `st-${idx}`,
+        done: doneMatch[1].toLowerCase() === "x",
+        title: doneMatch[2].trim(),
+      });
+    } else {
+      descLines.push(line);
+    }
+  });
+
+  return {
+    cleanDesc: descLines.join("\n").trim(),
+    subtasks,
+  };
+}
+
+export function serializeSubtasks(cleanDesc: string, subtasks: SubtaskItem[]): string {
+  const subtaskBlock = subtasks
+    .map((st) => `- [${st.done ? "x" : " "}] ${st.title}`)
+    .join("\n");
+  if (!cleanDesc && !subtaskBlock) return "";
+  if (!cleanDesc) return subtaskBlock;
+  if (!subtaskBlock) return cleanDesc;
+  return `${cleanDesc}\n\n${subtaskBlock}`;
+}
 
 const SERVICE_TYPES: { value: ServiceType; label: string }[] = [
   { value: "website", label: "Website Design & Dev" },
@@ -55,17 +116,29 @@ export function ProjectsPage() {
 
   const { clients } = useClients();
   const { projects, isLoading: projectsLoading, createProject, updateProject, deleteProject, isCreating: isCreatingProj } = useProjects(targetClientId);
+
+  // Client workspace separation
+  const [selectedClientId, setSelectedClientId] = useState<string>("all");
+
+  const filteredProjects = useMemo(() => {
+    if (selectedClientId === "all") return projects;
+    return projects.filter((p) => p.client_id === selectedClientId);
+  }, [projects, selectedClientId]);
+
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
 
   useEffect(() => {
-    if (projects.length > 0) {
-      if (!selectedProjectId || !projects.some((p) => p.id === selectedProjectId)) {
-        setSelectedProjectId(projects[0].id);
+    if (filteredProjects.length > 0) {
+      if (!selectedProjectId || !filteredProjects.some((p) => p.id === selectedProjectId)) {
+        setSelectedProjectId(filteredProjects[0].id);
       }
+    } else {
+      setSelectedProjectId("");
     }
-  }, [projects, selectedProjectId]);
+  }, [filteredProjects, selectedProjectId]);
 
-  const selectedProject = projects.find((p) => p.id === selectedProjectId) || projects[0];
+  const selectedProject = filteredProjects.find((p) => p.id === selectedProjectId) || filteredProjects[0];
+  const currentProjectClient = clients.find((c) => c.id === selectedProject?.client_id);
 
   const {
     services,
@@ -95,12 +168,25 @@ export function ProjectsPage() {
   >("overview");
 
   // Live queries scoped to current service & project
-  const { tasks } = useTasks(selectedService?.id, selectedProject?.id);
+  const {
+    tasks,
+    updateStatus: updateTaskStatus,
+    createTask,
+    updateTask,
+    deleteTask,
+    isUpdating: isTaskUpdating,
+  } = useTasks(selectedService?.id, selectedProject?.id);
   const { deliverables } = useDeliverables(selectedService?.id, selectedProject?.id);
   const { approvals } = useApprovals(targetClientId);
   const { workRecords, createWorkRecord, deleteWorkRecord, isCreating: isCreatingRecord } = useWorkRecords(selectedService?.id, selectedProject?.id);
   const { files } = useFiles(selectedProject?.client_id, selectedService?.id);
-  const { milestones: serviceMilestones, createMilestone, deleteMilestone, updateMilestoneStatus } = useMilestones(selectedService?.id, selectedProject?.id);
+  const {
+    milestones: serviceMilestones,
+    createMilestone,
+    updateMilestone,
+    deleteMilestone,
+    updateMilestoneStatus,
+  } = useMilestones(selectedService?.id, selectedProject?.id);
   const { decisions: serviceDecisions, createDecision, deleteDecision } = useDecisions(selectedService?.id, selectedProject?.id);
   const serviceApprovals = approvals.filter((a) => a.service_id === selectedService?.id || a.project_id === selectedProject?.id);
 
@@ -112,6 +198,38 @@ export function ProjectsPage() {
   const [showAddMilestoneModal, setShowAddMilestoneModal] = useState(false);
   const [showAddDecisionModal, setShowAddDecisionModal] = useState(false);
   const [showRecordModal, setShowRecordModal] = useState(false);
+
+  // Milestone Edit Modal State
+  const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
+  const [editMilestoneName, setEditMilestoneName] = useState("");
+  const [editMilestoneDesc, setEditMilestoneDesc] = useState("");
+  const [editMilestoneDueDate, setEditMilestoneDueDate] = useState("");
+  const [editMilestoneStatus, setEditMilestoneStatus] = useState<MilestoneStatus>("not_started");
+
+  // Task & Subtask Management States
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDesc, setNewTaskDesc] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>("medium");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [newTaskMilestoneId, setNewTaskMilestoneId] = useState("");
+  const [newTaskVisibility, setNewTaskVisibility] = useState<Visibility>("client");
+  const [newTaskSubtasks, setNewTaskSubtasks] = useState<string[]>([]);
+  const [newTaskSubtaskInput, setNewTaskSubtaskInput] = useState("");
+
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState("");
+  const [editTaskDesc, setEditTaskDesc] = useState("");
+  const [editTaskPriority, setEditTaskPriority] = useState<TaskPriority>("medium");
+  const [editTaskStatus, setEditTaskStatus] = useState<TaskStatus>("planned");
+  const [editTaskDueDate, setEditTaskDueDate] = useState("");
+  const [editTaskMilestoneId, setEditTaskMilestoneId] = useState("");
+  const [editTaskSubtasks, setEditTaskSubtasks] = useState<SubtaskItem[]>([]);
+  const [editTaskSubtaskInput, setEditTaskSubtaskInput] = useState("");
+
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskFilterStatus, setTaskFilterStatus] = useState<string>("all");
+  const [inlineSubtaskInputs, setInlineSubtaskInputs] = useState<Record<string, string>>({});
 
   // New Project Form
   const [newProjClientId, setNewProjClientId] = useState("");
@@ -355,6 +473,182 @@ export function ProjectsPage() {
       toast.success(`Milestone marked as ${nextStatus.replace("_", " ")}.`);
     } catch (err: any) {
       toast.error(err.message || "Failed to update milestone status.");
+    }
+  };
+
+  const handleOpenEditMilestone = (m: Milestone) => {
+    setEditingMilestone(m);
+    setEditMilestoneName(m.name || m.title || "");
+    setEditMilestoneDesc(m.description || "");
+    setEditMilestoneDueDate(m.due_date ? m.due_date.split("T")[0] : "");
+    setEditMilestoneStatus(m.status);
+  };
+
+  const handleUpdateMilestone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMilestone) return;
+    try {
+      await updateMilestone({
+        id: editingMilestone.id,
+        updates: {
+          name: editMilestoneName,
+          title: editMilestoneName,
+          description: editMilestoneDesc,
+          due_date: editMilestoneDueDate || null,
+          status: editMilestoneStatus,
+        },
+      });
+      toast.success("Milestone updated successfully.");
+      setEditingMilestone(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update milestone.");
+    }
+  };
+
+  // Task & Subtask Handlers
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim() || !selectedProject) return;
+
+    try {
+      const initialSubtasks: SubtaskItem[] = newTaskSubtasks.map((sub, i) => ({
+        id: `sub-${Date.now()}-${i}`,
+        title: sub,
+        done: false,
+      }));
+      const fullDescription = serializeSubtasks(newTaskDesc, initialSubtasks);
+
+      await createTask({
+        project_id: selectedProject.id,
+        service_id: selectedService?.id || null,
+        client_id: selectedProject.client_id,
+        title: newTaskTitle.trim(),
+        description: fullDescription,
+        status: "planned",
+        priority: newTaskPriority,
+        due_date: newTaskDueDate || null,
+        milestone_id: newTaskMilestoneId || null,
+        visibility: newTaskVisibility,
+      });
+
+      toast.success(`Task "${newTaskTitle}" created.`);
+      setNewTaskTitle("");
+      setNewTaskDesc("");
+      setNewTaskPriority("medium");
+      setNewTaskDueDate("");
+      setNewTaskMilestoneId("");
+      setNewTaskSubtasks([]);
+      setNewTaskSubtaskInput("");
+      setShowAddTaskModal(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create task.");
+    }
+  };
+
+  const handleOpenEditTask = (t: Task) => {
+    const { cleanDescription, subtasks } = parseSubtasks(t.description || "");
+    setEditingTask(t);
+    setEditTaskTitle(t.title);
+    setEditTaskDesc(cleanDescription);
+    setEditTaskPriority(t.priority || "medium");
+    setEditTaskStatus(t.status || "planned");
+    setEditTaskDueDate(t.due_date ? t.due_date.split("T")[0] : "");
+    setEditTaskMilestoneId(t.milestone_id || "");
+    setEditTaskSubtasks(subtasks);
+    setEditTaskSubtaskInput("");
+  };
+
+  const handleUpdateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTask) return;
+
+    try {
+      const fullDescription = serializeSubtasks(editTaskDesc, editTaskSubtasks);
+      await updateTask({
+        id: editingTask.id,
+        updates: {
+          title: editTaskTitle.trim(),
+          description: fullDescription,
+          priority: editTaskPriority,
+          status: editTaskStatus,
+          due_date: editTaskDueDate || null,
+          milestone_id: editTaskMilestoneId || null,
+        },
+      });
+
+      toast.success("Task updated successfully.");
+      setEditingTask(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update task.");
+    }
+  };
+
+  const handleDeleteTask = async (id: string, title: string) => {
+    if (!window.confirm(`Delete task "${title}"?`)) return;
+    try {
+      await deleteTask(id);
+      toast.success("Task deleted.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete task.");
+    }
+  };
+
+  const handleToggleSubtask = async (task: Task, subtaskId: string) => {
+    const { cleanDescription, subtasks } = parseSubtasks(task.description || "");
+    const updatedSubtasks = subtasks.map((st) =>
+      st.id === subtaskId ? { ...st, done: !st.done } : st
+    );
+    const newDesc = serializeSubtasks(cleanDescription, updatedSubtasks);
+    try {
+      await updateTask({
+        id: task.id,
+        updates: { description: newDesc },
+      });
+    } catch (err: any) {
+      toast.error("Failed to toggle subtask.");
+    }
+  };
+
+  const handleAddSubtaskInline = async (task: Task) => {
+    const text = inlineSubtaskInputs[task.id]?.trim();
+    if (!text) return;
+    const { cleanDescription, subtasks } = parseSubtasks(task.description || "");
+    const updatedSubtasks = [
+      ...subtasks,
+      { id: `sub-${Date.now()}`, title: text, done: false },
+    ];
+    const newDesc = serializeSubtasks(cleanDescription, updatedSubtasks);
+    try {
+      await updateTask({
+        id: task.id,
+        updates: { description: newDesc },
+      });
+      setInlineSubtaskInputs((prev) => ({ ...prev, [task.id]: "" }));
+    } catch (err: any) {
+      toast.error("Failed to add subtask.");
+    }
+  };
+
+  const handleDeleteSubtaskInline = async (task: Task, subtaskId: string) => {
+    const { cleanDescription, subtasks } = parseSubtasks(task.description || "");
+    const updatedSubtasks = subtasks.filter((st) => st.id !== subtaskId);
+    const newDesc = serializeSubtasks(cleanDescription, updatedSubtasks);
+    try {
+      await updateTask({
+        id: task.id,
+        updates: { description: newDesc },
+      });
+    } catch (err: any) {
+      toast.error("Failed to delete subtask.");
+    }
+  };
+
+  const handleQuickTaskStatus = async (task: Task, newStatus: TaskStatus) => {
+    try {
+      await updateTaskStatus({ id: task.id, status: newStatus });
+      toast.success(`Task status set to ${newStatus.replace("_", " ")}`);
+    } catch (err: any) {
+      toast.error("Failed to update status.");
     }
   };
 
@@ -608,18 +902,40 @@ export function ProjectsPage() {
         description="Every service operates in an isolated workspace acting as a permanent, unalterable historical record of all digital work."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground font-mono">Project:</span>
-            <select
-              value={selectedProject.id}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="text-xs bg-card font-semibold border border-border rounded-lg px-3 py-1.5 text-foreground focus:outline-hidden cursor-pointer"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            {isManager && (
+              <div className="flex items-center gap-1.5 bg-card px-2.5 py-1.5 rounded-lg border border-border shadow-2xs">
+                <Building2 className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider font-semibold">Client:</span>
+                <select
+                  value={selectedClientId}
+                  onChange={(e) => setSelectedClientId(e.target.value)}
+                  className="text-xs bg-transparent font-semibold text-foreground focus:outline-hidden cursor-pointer"
+                >
+                  <option value="all">All Clients ({clients.length})</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5 bg-card px-2.5 py-1.5 rounded-lg border border-border shadow-2xs">
+              <FolderOpen className="w-3.5 h-3.5 text-primary" />
+              <span className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider font-semibold">Project:</span>
+              <select
+                value={selectedProject.id}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="text-xs bg-transparent font-semibold text-foreground focus:outline-hidden cursor-pointer max-w-[200px] truncate"
+              >
+                {filteredProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {isManager && (
               <>
@@ -649,6 +965,35 @@ export function ProjectsPage() {
           </div>
         }
       />
+
+      {/* Workspace Hierarchy Context Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-secondary/30 border border-border/80 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider">Workspace:</span>
+          <div className="flex items-center gap-1.5 font-medium text-foreground">
+            <span className="inline-flex items-center gap-1 text-primary font-semibold">
+              <Building2 className="w-3.5 h-3.5" />
+              {currentProjectClient?.name || "Client"}
+            </span>
+            <span className="text-muted-foreground">/</span>
+            <span className="font-semibold text-foreground">{selectedProject.name}</span>
+            {selectedService && (
+              <>
+                <span className="text-muted-foreground">/</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary font-mono text-[11px]">
+                  <Layers className="w-3 h-3" />
+                  {selectedService.name}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-mono text-muted-foreground">
+            {filteredProjects.length} {filteredProjects.length === 1 ? "Project" : "Projects"} in client scope
+          </span>
+        </div>
+      </div>
 
       {/* Service Area Selector Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-border">
@@ -870,13 +1215,22 @@ export function ProjectsPage() {
                               </p>
                             </div>
                             {isManager && (
-                              <button
-                                onClick={() => handleDeleteMilestone(m.id, m.title || m.name)}
-                                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                title="Delete milestone"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleOpenEditMilestone(m)}
+                                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors cursor-pointer"
+                                  title="Edit milestone"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteMilestone(m.id, m.title || m.name)}
+                                  className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                  title="Delete milestone"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -959,30 +1313,287 @@ export function ProjectsPage() {
             )}
 
             {activeTab === "tasks" && (
-              <div className="space-y-3">
-                {tasks.length === 0 ? (
-                  <div className="p-8 text-center bg-card rounded-xl border border-dashed border-border text-xs text-muted-foreground">
-                    No tasks assigned to this service stream.
-                  </div>
-                ) : (
-                  tasks.map((t) => (
-                    <div
-                      key={t.id}
-                      className="p-4 rounded-xl bg-card border border-border shadow-2xs flex items-center justify-between gap-4"
-                    >
-                      <div className="space-y-1">
-                        <h4 className="text-xs font-bold text-foreground">{t.title}</h4>
-                        <p className="text-[11px] text-muted-foreground">{t.description}</p>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-[11px] font-mono text-muted-foreground">
-                          Due {formatDate(t.due_date)}
-                        </span>
-                        <StatusBadge status={t.status} />
-                      </div>
+              <div className="space-y-4">
+                {/* Task Toolbar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-2xs">
+                  <div className="flex items-center gap-2 flex-1 flex-wrap">
+                    <div className="relative flex-1 min-w-[200px] max-w-xs">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={taskSearch}
+                        onChange={(e) => setTaskSearch(e.target.value)}
+                        placeholder="Search tasks or subtasks..."
+                        className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                      />
                     </div>
-                  ))
-                )}
+
+                    <div className="flex items-center gap-1 overflow-x-auto">
+                      {(["all", "planned", "in_progress", "review", "completed"] as const).map((st) => {
+                        const count = st === "all" ? tasks.length : tasks.filter((t) => t.status === st).length;
+                        return (
+                          <button
+                            key={st}
+                            onClick={() => setTaskFilterStatus(st)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                              taskFilterStatus === st
+                                ? "bg-primary text-primary-foreground shadow-2xs"
+                                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                            }`}
+                          >
+                            {st === "all" ? "All" : st.replace("_", " ")} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {isManager && (
+                    <button
+                      onClick={() => setShowAddTaskModal(true)}
+                      className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Task
+                    </button>
+                  )}
+                </div>
+
+                {/* Task Cards Matrix */}
+                {(() => {
+                  const filtered = tasks.filter((t) => {
+                    const matchesSearch =
+                      !taskSearch ||
+                      t.title.toLowerCase().includes(taskSearch.toLowerCase()) ||
+                      (t.description && t.description.toLowerCase().includes(taskSearch.toLowerCase()));
+                    const matchesStatus = taskFilterStatus === "all" || t.status === taskFilterStatus;
+                    return matchesSearch && matchesStatus;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="p-10 text-center bg-card rounded-2xl border border-dashed border-border space-y-3">
+                        <CheckSquare className="w-8 h-8 text-muted-foreground mx-auto" />
+                        <h4 className="text-sm font-bold text-foreground">No Tasks Found</h4>
+                        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                          {taskSearch || taskFilterStatus !== "all"
+                            ? "No tasks match your current filter or search criteria."
+                            : "Create your first task to plan work, link milestones, and track subtask checklists."}
+                        </p>
+                        {isManager && (
+                          <button
+                            onClick={() => setShowAddTaskModal(true)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer mt-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Create Task
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {filtered.map((t) => {
+                        const { cleanDescription, subtasks } = parseSubtasks(t.description || "");
+                        const completedSubtasks = subtasks.filter((s) => s.done).length;
+                        const subtaskPercent =
+                          subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 0;
+                        const linkedMilestone = serviceMilestones.find((m) => m.id === t.milestone_id);
+
+                        return (
+                          <div
+                            key={t.id}
+                            className="p-5 rounded-2xl bg-card border border-border shadow-2xs space-y-3 transition-all hover:border-primary/40"
+                          >
+                            {/* Task Top Meta & Actions */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  className={`text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded ${
+                                    t.priority === "urgent"
+                                      ? "bg-rose-500/10 text-rose-600 border border-rose-200"
+                                      : t.priority === "high"
+                                      ? "bg-amber-500/10 text-amber-600 border border-amber-200"
+                                      : t.priority === "medium"
+                                      ? "bg-blue-500/10 text-blue-600 border border-blue-200"
+                                      : "bg-slate-500/10 text-slate-600 border border-slate-200"
+                                  }`}
+                                >
+                                  {t.priority}
+                                </span>
+
+                                {linkedMilestone && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-primary/10 text-primary font-semibold flex items-center gap-1">
+                                    <Layers className="w-3 h-3" />
+                                    {linkedMilestone.name || linkedMilestone.title}
+                                  </span>
+                                )}
+
+                                {t.due_date && (
+                                  <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    Due {formatDate(t.due_date)}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {isManager ? (
+                                  <select
+                                    value={t.status}
+                                    onChange={(e) => handleQuickTaskStatus(t, e.target.value as TaskStatus)}
+                                    className="text-xs bg-secondary/50 font-semibold border border-border rounded-lg px-2.5 py-1 text-foreground focus:outline-hidden cursor-pointer"
+                                  >
+                                    <option value="planned">Planned</option>
+                                    <option value="in_progress">In Progress</option>
+                                    <option value="review">Review</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="blocked">Blocked</option>
+                                  </select>
+                                ) : (
+                                  <StatusBadge status={t.status} />
+                                )}
+
+                                {isManager && (
+                                  <div className="flex items-center gap-1 border-l border-border pl-2">
+                                    <button
+                                      onClick={() => handleOpenEditTask(t)}
+                                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors cursor-pointer"
+                                      title="Edit task & subtasks"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteTask(t.id, t.title)}
+                                      className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                      title="Delete task"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Task Content */}
+                            <div>
+                              <h4
+                                className={`text-sm font-bold text-foreground ${
+                                  t.status === "completed" ? "line-through text-muted-foreground" : ""
+                                }`}
+                              >
+                                {t.title}
+                              </h4>
+                              {cleanDescription && (
+                                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                                  {cleanDescription}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Subtasks Section */}
+                            <div className="pt-2 space-y-2.5">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                                  <CheckSquare className="w-3.5 h-3.5 text-primary" />
+                                  Subtasks ({completedSubtasks}/{subtasks.length})
+                                </span>
+                                {subtasks.length > 0 && (
+                                  <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                                    {subtaskPercent}% done
+                                  </span>
+                                )}
+                              </div>
+
+                              {subtasks.length > 0 && (
+                                <div className="w-full bg-secondary/60 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className="bg-primary h-full transition-all duration-300"
+                                    style={{ width: `${subtaskPercent}%` }}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Subtasks Checklist List */}
+                              {subtasks.length > 0 && (
+                                <div className="space-y-1.5 bg-secondary/20 p-2.5 rounded-xl border border-border/60">
+                                  {subtasks.map((st) => (
+                                    <div
+                                      key={st.id}
+                                      className="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-secondary/40 group transition-colors"
+                                    >
+                                      <button
+                                        onClick={() => handleToggleSubtask(t, st.id)}
+                                        className="flex items-center gap-2 text-left cursor-pointer flex-1"
+                                      >
+                                        <div
+                                          className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
+                                            st.done
+                                              ? "bg-primary border-primary text-primary-foreground"
+                                              : "border-border bg-card group-hover:border-primary/60"
+                                          }`}
+                                        >
+                                          {st.done && <Check className="w-3 h-3 stroke-[3]" />}
+                                        </div>
+                                        <span
+                                          className={`text-xs ${
+                                            st.done ? "line-through text-muted-foreground" : "text-foreground"
+                                          }`}
+                                        >
+                                          {st.title}
+                                        </span>
+                                      </button>
+
+                                      {isManager && (
+                                        <button
+                                          onClick={() => handleDeleteSubtaskInline(t, st.id)}
+                                          className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive p-1 transition-all cursor-pointer"
+                                          title="Delete subtask"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Inline Quick Add Subtask */}
+                              {isManager && (
+                                <div className="flex items-center gap-2 pt-1">
+                                  <input
+                                    type="text"
+                                    value={inlineSubtaskInputs[t.id] || ""}
+                                    onChange={(e) =>
+                                      setInlineSubtaskInputs((prev) => ({ ...prev, [t.id]: e.target.value }))
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleAddSubtaskInline(t);
+                                      }
+                                    }}
+                                    placeholder="+ Add a subtask (press Enter)..."
+                                    className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-border/80 bg-secondary/30 text-foreground placeholder:text-muted-foreground/70 focus:outline-hidden"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddSubtaskInline(t)}
+                                    className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1668,6 +2279,487 @@ export function ProjectsPage() {
                 >
                   {isCreatingRecord && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   Save Record
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Add Task Modal */}
+      {showAddTaskModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">Create New Task</h2>
+                <p className="text-xs text-muted-foreground">
+                  Workspace: {selectedService ? selectedService.name : selectedProject.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAddTaskModal(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTask} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Task Title</label>
+                <input
+                  type="text"
+                  required
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  placeholder="e.g. Design wireframes for checkout flow"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={newTaskDesc}
+                  onChange={(e) => setNewTaskDesc(e.target.value)}
+                  placeholder="Key instructions, acceptance criteria, context..."
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Priority</label>
+                  <select
+                    value={newTaskPriority}
+                    onChange={(e) => setNewTaskPriority(e.target.value as TaskPriority)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={newTaskDueDate}
+                    onChange={(e) => setNewTaskDueDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Link to Milestone</label>
+                  <select
+                    value={newTaskMilestoneId}
+                    onChange={(e) => setNewTaskMilestoneId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="">None (Independent Task)</option>
+                    {serviceMilestones.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name || m.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Visibility</label>
+                  <select
+                    value={newTaskVisibility}
+                    onChange={(e) => setNewTaskVisibility(e.target.value as Visibility)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="client">Client & Team</option>
+                    <option value="internal">Internal Team Only</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Subtasks List in Add Modal */}
+              <div className="pt-2 border-t border-border/60 space-y-2">
+                <label className="block text-xs font-semibold text-foreground">
+                  Subtask Checklist ({newTaskSubtasks.length})
+                </label>
+                {newTaskSubtasks.length > 0 && (
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                    {newTaskSubtasks.map((st, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-secondary/30 text-xs text-foreground"
+                      >
+                        <span>• {st}</span>
+                        <button
+                          type="button"
+                          onClick={() => setNewTaskSubtasks((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-muted-foreground hover:text-destructive p-0.5 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newTaskSubtaskInput}
+                    onChange={(e) => setNewTaskSubtaskInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (newTaskSubtaskInput.trim()) {
+                          setNewTaskSubtasks((prev) => [...prev, newTaskSubtaskInput.trim()]);
+                          setNewTaskSubtaskInput("");
+                        }
+                      }
+                    }}
+                    placeholder="Add a subtask step..."
+                    className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newTaskSubtaskInput.trim()) {
+                        setNewTaskSubtasks((prev) => [...prev, newTaskSubtaskInput.trim()]);
+                        setNewTaskSubtaskInput("");
+                      }
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 cursor-pointer"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddTaskModal(false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isTaskUpdating}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {isTaskUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Create Task
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit Task Modal */}
+      {editingTask && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">Edit Task & Subtasks</h2>
+                <p className="text-xs text-muted-foreground">ID: {editingTask.id.slice(0, 8)}</p>
+              </div>
+              <button
+                onClick={() => setEditingTask(null)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateTask} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Task Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editTaskTitle}
+                  onChange={(e) => setEditTaskTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={editTaskDesc}
+                  onChange={(e) => setEditTaskDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Status</label>
+                  <select
+                    value={editTaskStatus}
+                    onChange={(e) => setEditTaskStatus(e.target.value as TaskStatus)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="planned">Planned</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="review">Review</option>
+                    <option value="completed">Completed</option>
+                    <option value="blocked">Blocked</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Priority</label>
+                  <select
+                    value={editTaskPriority}
+                    onChange={(e) => setEditTaskPriority(e.target.value as TaskPriority)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={editTaskDueDate}
+                    onChange={(e) => setEditTaskDueDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Linked Milestone</label>
+                  <select
+                    value={editTaskMilestoneId}
+                    onChange={(e) => setEditTaskMilestoneId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="">None (Independent Task)</option>
+                    {serviceMilestones.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name || m.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Subtasks Management inside Edit Modal */}
+              <div className="pt-2 border-t border-border/60 space-y-2">
+                <label className="block text-xs font-semibold text-foreground">
+                  Subtask Checklist ({editTaskSubtasks.filter((s) => s.done).length}/{editTaskSubtasks.length} Done)
+                </label>
+                {editTaskSubtasks.length > 0 && (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {editTaskSubtasks.map((st) => (
+                      <div
+                        key={st.id}
+                        className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-secondary/30 text-xs"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditTaskSubtasks((prev) =>
+                              prev.map((item) => (item.id === st.id ? { ...item, done: !item.done } : item))
+                            )
+                          }
+                          className="flex items-center gap-2 cursor-pointer text-left flex-1"
+                        >
+                          <div
+                            className={`w-3.5 h-3.5 rounded flex items-center justify-center border text-[9px] font-bold ${
+                              st.done ? "bg-primary text-primary-foreground border-primary" : "border-border bg-card"
+                            }`}
+                          >
+                            {st.done && "✓"}
+                          </div>
+                          <span
+                            className={st.done ? "line-through text-muted-foreground" : "text-foreground"}
+                          >
+                            {st.title}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditTaskSubtasks((prev) => prev.filter((item) => item.id !== st.id))
+                          }
+                          className="text-muted-foreground hover:text-destructive p-0.5 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editTaskSubtaskInput}
+                    onChange={(e) => setEditTaskSubtaskInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (editTaskSubtaskInput.trim()) {
+                          setEditTaskSubtasks((prev) => [
+                            ...prev,
+                            { id: `sub-${Date.now()}`, title: editTaskSubtaskInput.trim(), done: false },
+                          ]);
+                          setEditTaskSubtaskInput("");
+                        }
+                      }
+                    }}
+                    placeholder="Add a new subtask..."
+                    className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editTaskSubtaskInput.trim()) {
+                        setEditTaskSubtasks((prev) => [
+                          ...prev,
+                          { id: `sub-${Date.now()}`, title: editTaskSubtaskInput.trim(), done: false },
+                        ]);
+                        setEditTaskSubtaskInput("");
+                      }
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 cursor-pointer"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTask(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isTaskUpdating}
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {isTaskUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit Milestone Modal */}
+      {editingMilestone && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">Edit Milestone</h2>
+                <p className="text-xs text-muted-foreground">Modify milestone parameters & status</p>
+              </div>
+              <button
+                onClick={() => setEditingMilestone(null)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateMilestone} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Milestone Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editMilestoneName}
+                  onChange={(e) => setEditMilestoneName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={editMilestoneDesc}
+                  onChange={(e) => setEditMilestoneDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={editMilestoneDueDate}
+                    onChange={(e) => setEditMilestoneDueDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Status</label>
+                  <select
+                    value={editMilestoneStatus}
+                    onChange={(e) => setEditMilestoneStatus(e.target.value as MilestoneStatus)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
+                  >
+                    <option value="not_started">Not Started</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="blocked">Blocked</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingMilestone(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer"
+                >
+                  Save Milestone
                 </button>
               </div>
             </form>

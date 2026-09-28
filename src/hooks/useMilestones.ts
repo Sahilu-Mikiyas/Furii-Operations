@@ -18,18 +18,41 @@ export function useMilestones(serviceId?: string, projectId?: string) {
         return [];
       }
 
-      return data as Milestone[];
+      // Ensure both .name and .title are present for downstream components
+      return data.map((m: any) => ({
+        ...m,
+        title: m.name || m.title || "Untitled Milestone",
+      })) as Milestone[];
     },
   });
 
   const updateMilestoneMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: MilestoneStatus }) => {
+    mutationFn: async ({
+      id,
+      updates,
+    }: {
+      id: string;
+      updates: Partial<Milestone> & { title?: string };
+    }) => {
       const updateData: Record<string, any> = {
-        status,
         updated_at: new Date().toISOString(),
       };
-      if (status === "completed") {
-        updateData.completed_at = new Date().toISOString();
+      if (updates.name) {
+        updateData.name = updates.name;
+      } else if (updates.title) {
+        updateData.name = updates.title;
+      }
+
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.due_date !== undefined) updateData.due_date = updates.due_date;
+      if (updates.order_index !== undefined) updateData.order_index = updates.order_index;
+      if (updates.status !== undefined) {
+        updateData.status = updates.status;
+        if (updates.status === "completed") {
+          updateData.completed_at = new Date().toISOString();
+        } else {
+          updateData.completed_at = null;
+        }
       }
 
       const { data, error } = await supabase
@@ -49,15 +72,16 @@ export function useMilestones(serviceId?: string, projectId?: string) {
   });
 
   const createMilestoneMutation = useMutation({
-    mutationFn: async (newMilestone: Partial<Milestone>) => {
+    mutationFn: async (newMilestone: Partial<Milestone> & { title?: string }) => {
+      const milestoneName = newMilestone.name || newMilestone.title || "Untitled Milestone";
       const payload = {
         organization_id: newMilestone.organization_id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
         project_id: newMilestone.project_id,
         service_id: newMilestone.service_id,
         client_id: newMilestone.client_id,
-        title: newMilestone.title,
+        name: milestoneName,
         description: newMilestone.description || "",
-        status: newMilestone.status || "planned",
+        status: newMilestone.status || "not_started",
         due_date: newMilestone.due_date || null,
         order_index: newMilestone.order_index ?? 0,
       };
@@ -87,9 +111,17 @@ export function useMilestones(serviceId?: string, projectId?: string) {
   return {
     ...query,
     milestones: query.data || [],
-    updateMilestoneStatus: updateMilestoneMutation.mutateAsync,
+    updateMilestone: updateMilestoneMutation.mutateAsync,
+    updateMilestoneStatus: (
+      idOrParams: string | { id: string; status: MilestoneStatus },
+      maybeStatus?: MilestoneStatus
+    ) => {
+      const id = typeof idOrParams === "string" ? idOrParams : idOrParams.id;
+      const status = typeof idOrParams === "string" ? maybeStatus! : idOrParams.status;
+      return updateMilestoneMutation.mutateAsync({ id, updates: { status } });
+    },
     createMilestone: createMilestoneMutation.mutateAsync,
     deleteMilestone: deleteMilestoneMutation.mutateAsync,
+    isUpdatingMilestone: updateMilestoneMutation.isPending,
   };
 }
-

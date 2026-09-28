@@ -199,6 +199,7 @@ export interface Milestone extends BaseRecord {
   service_id: string;
   client_id: string;
   name: string;
+  title?: string;
   description?: string | null;
   status: MilestoneStatus;
   order_index: number;
