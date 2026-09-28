@@ -8,14 +8,23 @@ import {
   CheckCircle2,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 
 interface TopBarProps {
   onOpenSearch?: () => void;
   onToggleMobileMenu?: () => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebarCollapse?: () => void;
 }
 
-export function TopBar({ onOpenSearch, onToggleMobileMenu }: TopBarProps) {
+export function TopBar({
+  onOpenSearch,
+  onToggleMobileMenu,
+  isSidebarCollapsed,
+  onToggleSidebarCollapse,
+}: TopBarProps) {
   const {
     user,
     role,
@@ -59,7 +68,7 @@ export function TopBar({ onOpenSearch, onToggleMobileMenu }: TopBarProps) {
   return (
     <header className="h-16 border-b border-border/80 bg-background/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30">
       {/* Left: Mobile hamburger & Global Search */}
-      <div className="flex items-center gap-3 flex-1 max-w-md">
+      <div className="flex items-center gap-2.5 flex-1 max-w-md">
         {onToggleMobileMenu && (
           <button
             onClick={onToggleMobileMenu}
@@ -67,6 +76,25 @@ export function TopBar({ onOpenSearch, onToggleMobileMenu }: TopBarProps) {
             className="md:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
           >
             <Menu className="h-5 w-5" />
+          </button>
+        )}
+
+        {onToggleSidebarCollapse && (
+          <button
+            onClick={onToggleSidebarCollapse}
+            aria-label={isSidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+            title={isSidebarCollapsed ? "Show sidebar (expand)" : "Hide sidebar (collapse)"}
+            className={`hidden md:flex p-2 rounded-lg transition-colors cursor-pointer items-center justify-center shrink-0 border ${
+              isSidebarCollapsed
+                ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20"
+                : "bg-secondary/40 text-muted-foreground border-border hover:text-foreground hover:bg-secondary"
+            }`}
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
           </button>
         )}
 

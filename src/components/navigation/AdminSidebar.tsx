@@ -14,6 +14,7 @@ import {
   Settings,
   LogOut,
   X,
+  PanelLeftClose,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FuriiLogo } from "@/components/shared/FuriiLogo";
@@ -21,6 +22,8 @@ import { FuriiLogo } from "@/components/shared/FuriiLogo";
 interface AdminSidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 const ADMIN_NAV = [
@@ -53,24 +56,37 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
       <aside
         className={cn(
-          "w-64 border-r border-border bg-sidebar flex flex-col shrink-0 h-screen sticky top-0 select-none z-40 transition-transform duration-200 ease-in-out",
-          "fixed md:static inset-y-0 left-0",
-          isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+          "w-64 border-r border-border bg-sidebar flex flex-col shrink-0 h-screen fixed inset-y-0 left-0 select-none z-40 transition-transform duration-300 ease-in-out shadow-xs",
+          // Mobile responsive state
+          isOpen ? "translate-x-0" : "-translate-x-full",
+          // Desktop collapse state
+          isCollapsed ? "md:-translate-x-full" : "md:translate-x-0"
         )}
       >
         {/* Brand Header */}
-        <div className="h-16 border-b border-border/80 px-6 flex items-center justify-between">
+        <div className="h-16 border-b border-border/80 px-4 sm:px-5 flex items-center justify-between shrink-0">
           <Link to="/admin/dashboard" className="flex items-center gap-2.5">
             <FuriiLogo className="h-7" />
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground font-semibold border border-border">
               Operations
             </span>
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                title="Hide sidebar"
+                aria-label="Hide sidebar"
+                className="hidden md:flex p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            )}
             {onClose && (
               <button
                 onClick={onClose}
-                className="md:hidden p-1 rounded-md text-muted-foreground hover:text-foreground"
+                aria-label="Close sidebar"
+                className="md:hidden p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
