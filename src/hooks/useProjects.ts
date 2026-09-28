@@ -31,7 +31,7 @@ export function useProjects(clientId?: string) {
       let orgId = newProject.organization_id;
       if (!orgId) {
         const { data: org } = await supabase.from("organizations").select("id").limit(1).single();
-        orgId = org?.id || "furii-org-01";
+        orgId = org?.id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29";
       }
 
       const payload = {

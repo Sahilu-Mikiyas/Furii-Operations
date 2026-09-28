@@ -77,7 +77,7 @@ export function useFiles(clientId?: string, serviceId?: string) {
       const { data: fileRow, error: insertErr } = await supabase
         .from("files")
         .insert({
-          organization_id: clientRow?.organization_id || "furii-org-01",
+          organization_id: clientRow?.organization_id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
           client_id: clientId,
           project_id: projectId || null,
           service_id: serviceId || null,

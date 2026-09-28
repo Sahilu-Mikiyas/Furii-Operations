@@ -689,6 +689,7 @@ export function ProjectsPage() {
     if (!recordTitle.trim() || !selectedService || !selectedProject) return;
     try {
       await createWorkRecord({
+        organization_id: selectedProject.organization_id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
         project_id: selectedProject.id,
         service_id: selectedService.id,
         client_id: selectedProject.client_id,

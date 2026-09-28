@@ -35,8 +35,14 @@ export function useWorkRecords(serviceId?: string, projectId?: string) {
 
   const createRecordMutation = useMutation({
     mutationFn: async (newRecord: Partial<WorkRecord>) => {
+      let orgId = newRecord.organization_id;
+      if (!orgId) {
+        const { data: org } = await supabase.from("organizations").select("id").limit(1).maybeSingle();
+        orgId = org?.id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29";
+      }
+
       const payload = {
-        organization_id: newRecord.organization_id || "furii-org-01",
+        organization_id: orgId,
         project_id: newRecord.project_id,
         service_id: newRecord.service_id,
         client_id: newRecord.client_id,

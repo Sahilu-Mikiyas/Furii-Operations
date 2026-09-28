@@ -66,7 +66,7 @@ export function useTasks(serviceId?: string, projectId?: string) {
       let orgId = newTask.organization_id;
       if (!orgId) {
         const { data: org } = await supabase.from("organizations").select("id").limit(1).single();
-        orgId = org?.id || "furii-org-01";
+        orgId = org?.id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29";
       }
 
       const payload = {
