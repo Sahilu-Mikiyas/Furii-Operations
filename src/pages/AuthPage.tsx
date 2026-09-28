@@ -19,7 +19,7 @@ export function AuthPage() {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -27,8 +27,27 @@ export function AuthPage() {
           },
         });
         if (error) throw error;
-        toast.success("Account created! Check your email for verification.");
-        navigate("/");
+
+        // If session is already created, navigate immediately
+        if (data?.session) {
+          toast.success("Account created! Welcome to Furii Operations.");
+          navigate("/");
+          return;
+        }
+
+        // Auto sign-in immediately with no verification wait
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (signInErr) {
+          toast.success("Account created successfully! You can now log in.");
+          setIsSignUp(false);
+        } else {
+          toast.success("Account created! Welcome to Furii Operations.");
+          navigate("/");
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
