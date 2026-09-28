@@ -149,15 +149,16 @@ export function ClientOverviewPage() {
                 </p>
               </div>
 
-              <div className="pt-2.5 border-t border-border/60 flex items-center justify-between">
+              <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-3 min-w-0">
                 <CircularProgress
                   value={srv.progress}
-                  size={36}
+                  size={38}
                   strokeWidth={3.5}
                   label="Phase Progress"
                   sublabel={srv.current_phase || (srv.progress === 100 ? "Completed" : "Active")}
+                  className="min-w-0 flex-1"
                 />
-                <span className="text-[11px] font-semibold text-primary group-hover:translate-x-0.5 transition-transform flex items-center gap-1 shrink-0">
+                <span className="text-xs font-semibold text-primary group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 shrink-0">
                   Track →
                 </span>
               </div>

@@ -45,7 +45,7 @@ export function CircularProgress({
   }
 
   return (
-    <div className={cn("inline-flex items-center gap-3", className)}>
+    <div className={cn("inline-flex items-center gap-2.5 min-w-0 max-w-full", className)}>
       <div
         className="relative shrink-0 flex items-center justify-center select-none"
         style={{ width: size, height: size }}
@@ -56,7 +56,16 @@ export function CircularProgress({
           viewBox={`0 0 ${size} ${size}`}
           className="transform -rotate-90 overflow-visible"
         >
-          {/* Background track ring */}
+          {/* Subtle inner background fill for visual depth */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="currentColor"
+            className="text-secondary/50 dark:text-secondary/20"
+          />
+
+          {/* Background track ring with clean border contrast */}
           <circle
             cx={size / 2}
             cy={size / 2}
@@ -64,22 +73,24 @@ export function CircularProgress({
             fill="transparent"
             stroke="currentColor"
             strokeWidth={strokeWidth}
-            className="text-secondary/80 dark:text-muted/30"
+            className="text-border dark:text-border/70"
           />
 
           {/* Active progress ring */}
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="transparent"
-            stroke="currentColor"
-            strokeWidth={strokeWidth}
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            className={cn(strokeColor, "transition-all duration-700 ease-out")}
-          />
+          {clamped > 0 && (
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="transparent"
+              stroke="currentColor"
+              strokeWidth={strokeWidth}
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+              className={cn(strokeColor, "transition-all duration-700 ease-out")}
+            />
+          )}
         </svg>
 
         {showValue && (
@@ -89,8 +100,8 @@ export function CircularProgress({
             ) : (
               <span
                 className={cn(
-                  "font-mono font-bold leading-none",
-                  size >= 48 ? "text-[11px]" : "text-[10px]",
+                  "font-mono font-bold leading-none select-none",
+                  size >= 48 ? "text-xs" : size >= 38 ? "text-[10px]" : "text-[9px]",
                   textColor,
                   valueClassName
                 )}
@@ -103,14 +114,17 @@ export function CircularProgress({
       </div>
 
       {(label || sublabel) && (
-        <div className="min-w-0 flex flex-col justify-center">
+        <div className="min-w-0 flex-1 flex flex-col justify-center overflow-hidden">
           {label && (
             <span className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-semibold block truncate">
               {label}
             </span>
           )}
           {sublabel && (
-            <span className="text-xs font-bold text-foreground block truncate">
+            <span
+              title={sublabel}
+              className="text-xs font-bold text-foreground block truncate"
+            >
               {sublabel}
             </span>
           )}
