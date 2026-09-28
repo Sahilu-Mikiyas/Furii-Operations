@@ -152,30 +152,6 @@ export function ClientFinancialsPage() {
       <PageHeader
         title="Financial Statement & Invoicing"
         description="Formal accounting of project invoices, milestone deposits, and remaining balances."
-        actions={
-          <div className="flex items-center gap-1 bg-secondary/50 p-1 rounded-xl border border-border shadow-2xs">
-            <button
-              onClick={() => setCurrency("ETB")}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-                currency === "ETB"
-                  ? "bg-card text-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              ETB
-            </button>
-            <button
-              onClick={() => setCurrency("USD")}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-                currency === "USD"
-                  ? "bg-card text-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              USD
-            </button>
-          </div>
-        }
       />
 
       {/* Summary Cards */}

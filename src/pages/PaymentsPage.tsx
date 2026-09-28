@@ -266,29 +266,6 @@ export function PaymentsPage() {
         description="Transparent tracking of client contracts, issued invoices, verified payment records, and outstanding balances."
         actions={
           <div className="flex items-center gap-3">
-            <div className="flex items-center bg-secondary/70 p-0.5 rounded-lg border border-border">
-              <button
-                onClick={() => setCurrency("ETB")}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                  currency === "ETB"
-                    ? "bg-primary text-primary-foreground shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                ETB
-              </button>
-              <button
-                onClick={() => setCurrency("USD")}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                  currency === "USD"
-                    ? "bg-primary text-primary-foreground shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                USD
-              </button>
-            </div>
-
             {isManager && (
               <button
                 onClick={() => setShowCreateInvoiceModal(true)}

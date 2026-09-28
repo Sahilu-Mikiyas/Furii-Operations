@@ -142,29 +142,10 @@ export function SettingsPage() {
 
         <div>
           <label className="text-xs font-semibold text-foreground block mb-1">Primary Operating Currency</label>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setCurrency("ETB")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${
-                currency === "ETB"
-                  ? "bg-primary text-primary-foreground border-primary shadow-2xs"
-                  : "bg-secondary text-muted-foreground border-border hover:text-foreground"
-              }`}
-            >
-              ETB — Ethiopian Birr
-            </button>
-            <button
-              type="button"
-              onClick={() => setCurrency("USD")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${
-                currency === "USD"
-                  ? "bg-primary text-primary-foreground border-primary shadow-2xs"
-                  : "bg-secondary text-muted-foreground border-border hover:text-foreground"
-              }`}
-            >
-              USD — United States Dollar
-            </button>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground shadow-2xs font-mono">
+              ETB — Ethiopian Birr (Standard)
+            </span>
           </div>
         </div>
 

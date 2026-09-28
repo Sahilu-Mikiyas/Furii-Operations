@@ -114,29 +114,6 @@ export function TopBar({
 
       {/* Right Control Bar */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Currency Switcher */}
-        <div className="flex items-center bg-secondary/70 p-0.5 rounded-lg border border-border text-xs">
-          <button
-            onClick={() => setCurrency("ETB")}
-            className={`px-2 py-0.5 sm:px-2.5 sm:py-1 font-semibold rounded-md transition-colors cursor-pointer ${
-              currency === "ETB"
-                ? "bg-primary text-primary-foreground shadow-2xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            ETB
-          </button>
-          <button
-            onClick={() => setCurrency("USD")}
-            className={`px-2 py-0.5 sm:px-2.5 sm:py-1 font-semibold rounded-md transition-colors cursor-pointer ${
-              currency === "USD"
-                ? "bg-primary text-primary-foreground shadow-2xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            USD
-          </button>
-        </div>
 
         {/* Notifications */}
         <div className="relative">
