@@ -24,6 +24,7 @@ import {
   Activity,
   Award,
   Circle,
+  FileSignature,
 } from "lucide-react";
 import type {
   Service,
@@ -48,6 +49,7 @@ import { useChecklists } from "@/hooks/useChecklists";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { ReceiptInvoiceModal } from "@/components/shared/ReceiptInvoiceModal";
+import { ContractWorkspaceView } from "@/components/contracts/ContractWorkspaceView";
 import type { ReceiptPdfData } from "@/lib/invoicePdfGenerator";
 
 export interface SubtaskItem {
@@ -101,7 +103,8 @@ export function ServiceProgressDetailModal({
   currency = "ETB",
 }: ServiceProgressDetailModalProps) {
   const navigate = useNavigate();
-  const { currentClient } = useAuth();
+  const { currentClient, role } = useAuth();
+  const isManager = role === "super_admin" || role === "admin" || role === "operations_manager";
 
   // Scoped queries (Read-Only on client side)
   const { tasks } = useTasks(service?.id, service?.project_id);
@@ -112,8 +115,8 @@ export function ServiceProgressDetailModal({
   const { getServiceFinancials } = useFinancialSummary(service?.client_id);
   const { categories: checklistCategories, items: checklistItems } = useChecklists();
 
-  // Active Tab inside modal: "tasks" | "milestones" | "deliverables" | "activity" | "scope"
-  const [modalTab, setModalTab] = useState<"tasks" | "milestones" | "deliverables" | "activity" | "scope">(
+  // Active Tab inside modal: "tasks" | "milestones" | "deliverables" | "contracts" | "activity" | "scope"
+  const [modalTab, setModalTab] = useState<"tasks" | "milestones" | "deliverables" | "contracts" | "activity" | "scope">(
     "tasks"
   );
 
@@ -502,6 +505,18 @@ export function ServiceProgressDetailModal({
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-secondary font-mono">
               {serviceDeliverables.length}
             </span>
+          </button>
+
+          <button
+            onClick={() => setModalTab("contracts")}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg transition-all border-b-2 cursor-pointer whitespace-nowrap ${
+              modalTab === "contracts"
+                ? "border-primary text-primary bg-card shadow-2xs"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <FileSignature className="w-3.5 h-3.5" />
+            <span>Contracts</span>
           </button>
 
           <button
@@ -947,7 +962,21 @@ export function ServiceProgressDetailModal({
           )}
 
           {/* ======================================================== */}
-          {/* TAB 4: LIVE AUDIT TRAIL                                  */}
+          {/* TAB 4: CONTRACTS & DIGITAL SIGN-OFF                      */}
+          {/* ======================================================== */}
+          {modalTab === "contracts" && (
+            <div className="space-y-4">
+              <ContractWorkspaceView
+                serviceId={service?.id}
+                projectId={service?.project_id}
+                clientId={service?.client_id}
+                isManager={isManager}
+              />
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 5: LIVE AUDIT TRAIL                                  */}
           {/* ======================================================== */}
           {modalTab === "activity" && (
             <div className="space-y-4">

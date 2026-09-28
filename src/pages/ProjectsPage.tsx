@@ -42,9 +42,11 @@ import {
   FileCode,
   ShieldCheck,
   MessageSquare,
+  FileSignature,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { ContractWorkspaceView } from "@/components/contracts/ContractWorkspaceView";
 import type {
   ServiceType,
   ServiceStatus,
@@ -176,7 +178,7 @@ export function ProjectsPage() {
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "work" | "tasks" | "deliverables" | "approvals" | "decisions" | "files"
+    "overview" | "work" | "tasks" | "deliverables" | "approvals" | "decisions" | "contracts" | "files"
   >("overview");
 
   // Live queries scoped to current service & project
@@ -1494,6 +1496,7 @@ export function ProjectsPage() {
                 { id: "deliverables", label: "Deliverables", icon: FileCheck2, count: deliverables.length },
                 { id: "approvals", label: "Approvals", icon: CheckCircle2, count: serviceApprovals.length },
                 { id: "decisions", label: "Decisions", icon: Scale, count: serviceDecisions.length },
+                { id: "contracts", label: "Contracts", icon: FileSignature, count: 1 },
                 { id: "files", label: "Files", icon: FolderOpen, count: files.length },
               ] as const
             ).map((tab) => {
@@ -2414,6 +2417,15 @@ export function ProjectsPage() {
                   </div>
                 )}
               </div>
+            )}
+
+            {activeTab === "contracts" && (
+              <ContractWorkspaceView
+                serviceId={selectedService?.id}
+                projectId={selectedProject?.id}
+                clientId={selectedProject?.client_id}
+                isManager={isManager}
+              />
             )}
 
             {activeTab === "files" && (
