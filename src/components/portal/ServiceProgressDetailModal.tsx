@@ -41,6 +41,7 @@ import { useMilestones } from "@/hooks/useMilestones";
 import { useDeliverables } from "@/hooks/useDeliverables";
 import { useWorkRecords } from "@/hooks/useWorkRecords";
 import { useInvoices } from "@/hooks/useInvoices";
+import { useFinancialSummary } from "@/hooks/useFinancialSummary";
 import { CURATED_PACKAGES } from "@/data/catalog";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useChecklists } from "@/hooks/useChecklists";
@@ -108,6 +109,7 @@ export function ServiceProgressDetailModal({
   const { deliverables } = useDeliverables(service?.id, service?.project_id);
   const { workRecords } = useWorkRecords(service?.id, service?.project_id);
   const { invoices } = useInvoices(service?.client_id);
+  const { getServiceFinancials } = useFinancialSummary(service?.client_id);
   const { categories: checklistCategories, items: checklistItems } = useChecklists();
 
   // Active Tab inside modal: "tasks" | "milestones" | "deliverables" | "activity" | "scope"
@@ -167,14 +169,15 @@ export function ServiceProgressDetailModal({
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [receiptPdfData, setReceiptPdfData] = useState<ReceiptPdfData | null>(null);
 
-  // Invoices & financial progress
+  // Unified financial data
+  const { totalBilled, totalPaid } = useMemo(() => {
+    return getServiceFinancials(service);
+  }, [getServiceFinancials, service]);
+
   const projectInvoices = useMemo(() => {
     if (!service) return [];
     return invoices.filter((i) => i.project_id === service.project_id);
   }, [invoices, service]);
-
-  const totalBilled = projectInvoices.reduce((acc, i) => acc + (i.total || 0), 0);
-  const totalPaid = projectInvoices.reduce((acc, i) => acc + (i.amount_paid || 0), 0);
 
   const handleOpenReceipt = () => {
     if (!service) return;

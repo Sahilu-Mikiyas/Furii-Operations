@@ -355,6 +355,15 @@ export interface Decision extends BaseRecord {
   visibility: Visibility;
 }
 
+export interface CalendarEventComment {
+  id: string;
+  author_id: string;
+  author_name: string;
+  author_role: "client" | "agency" | "admin";
+  content: string;
+  created_at: string;
+}
+
 export interface Event extends BaseRecord {
   organization_id: string;
   project_id?: string | null;
@@ -365,10 +374,15 @@ export interface Event extends BaseRecord {
   event_type: EventType;
   start_datetime: string;
   end_datetime?: string | null;
+  start_time?: string;
+  end_time?: string | null;
   location?: string | null;
   is_all_day: boolean;
   visibility: Visibility;
-  created_by: string;
+  created_by?: string | null;
+  comments?: CalendarEventComment[];
+  call_sheet?: string | null;
+  clean_description?: string;
 }
 
 // ─────────────────────────────────────────────

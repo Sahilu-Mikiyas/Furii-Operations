@@ -5,6 +5,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useWorkRecords } from "@/hooks/useWorkRecords";
 import { useDeliverables } from "@/hooks/useDeliverables";
 import { useInvoices } from "@/hooks/useInvoices";
+import { useFinancialSummary } from "@/hooks/useFinancialSummary";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { Download, CheckCircle2, Layers, Receipt, Printer, Loader2 } from "lucide-react";
@@ -31,12 +32,7 @@ export function ReportsPage() {
   const { deliverables } = useDeliverables(undefined, projects[0]?.id);
   const { invoices } = useInvoices(activeClient.id);
 
-  const totalPaid = invoices
-    .filter((i) => i.status === "paid")
-    .reduce((acc, i) => acc + Number(i.total || i.amount || 0), 0);
-  const totalBalance = invoices
-    .filter((i) => i.status === "sent" || i.status === "partially_paid")
-    .reduce((acc, i) => acc + (Number(i.total || i.amount || 0) - Number(i.amount_paid || 0)), 0);
+  const { totalPaid, totalOutstanding: totalBalance } = useFinancialSummary(activeClient.id);
 
   return (
     <motion.div

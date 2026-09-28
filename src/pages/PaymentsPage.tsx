@@ -3,6 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useProjects } from "@/hooks/useProjects";
 import { useClients } from "@/hooks/useClients";
+import { useFinancialSummary } from "@/hooks/useFinancialSummary";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -160,13 +161,11 @@ export function PaymentsPage() {
     setIsReceiptModalOpen(true);
   };
 
-  const totalContract = projects.reduce((acc, p) => acc + Number(p.budget || 0), 0);
-  const totalPaid = invoices
-    .filter((i) => i.status === "paid")
-    .reduce((acc, i) => acc + Number(i.total || i.amount || 0), 0);
-  const totalOutstanding = invoices
-    .filter((i) => i.status === "sent" || i.status === "partially_paid" || i.status === "draft")
-    .reduce((acc, i) => acc + (Number(i.total || i.amount || 0) - Number(i.amount_paid || 0)), 0);
+  const {
+    totalPaid,
+    totalOutstanding,
+    totalCommitment: totalContract,
+  } = useFinancialSummary(targetClientId);
 
   const calculatedTotal = lineItems.reduce((acc, item) => acc + Number(item.quantity) * Number(item.unit_price), 0);
 

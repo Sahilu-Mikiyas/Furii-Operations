@@ -1,9 +1,7 @@
 import { useState, useMemo } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { useInvoices } from "@/hooks/useInvoices";
-import { useServiceRequests } from "@/hooks/useServiceRequests";
-import { useProjects } from "@/hooks/useProjects";
+import { useFinancialSummary } from "@/hooks/useFinancialSummary";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
@@ -39,10 +37,16 @@ export function ClientFinancialsPage() {
 
   const clientId = currentClient?.id;
 
-  // Real data queries
-  const { invoices, isLoading: invoicesLoading } = useInvoices(clientId);
-  const { requests, isLoading: requestsLoading } = useServiceRequests(clientId);
-  const { projects, isLoading: projectsLoading } = useProjects(clientId);
+  // Unified Financial Data
+  const {
+    paidItems,
+    outstandingItems,
+    allLedgerItems,
+    totalPaid,
+    totalOutstanding,
+    totalCommitment,
+    isLoading,
+  } = useFinancialSummary(clientId);
 
   const [filter, setFilter] = useState<"all" | "paid" | "outstanding">("all");
 
@@ -50,8 +54,6 @@ export function ClientFinancialsPage() {
   const [selectedReceiptData, setSelectedReceiptData] = useState<ReceiptPdfData | null>(null);
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
-
-  const isLoading = invoicesLoading || requestsLoading || projectsLoading;
 
   // Exchange rate helper: 1 USD ≈ 145 ETB standard benchmark
   const ETB_TO_USD_BENCHMARK = 145;
@@ -61,147 +63,6 @@ export function ClientFinancialsPage() {
     }
     return amountInETB;
   };
-
-  // Financial calculations
-  const { paidItems, outstandingItems, totalPaid, totalOutstanding, totalCommitment } =
-    useMemo(() => {
-      const paid: Array<{
-        id: string;
-        title: string;
-        type: string;
-        date: string;
-        amount: number;
-        status: "paid";
-        receipt_url?: string | null;
-        isProject?: boolean;
-        rawRequest?: any;
-        rawProject?: any;
-        rawInvoice?: any;
-      }> = [];
-
-      const outstanding: Array<{
-        id: string;
-        title: string;
-        type: string;
-        date: string;
-        amount: number;
-        status: "payment_review" | "pending";
-        receipt_url?: string | null;
-        requestId: string;
-      }> = [];
-
-      // 1. Process Approved & Converted Service Requests
-      // (When user attached receipt and was approved, it is PAID)
-      const approvedRequests = requests.filter(
-        (r) => r.status === "approved" || r.status === "converted"
-      );
-
-      approvedRequests.forEach((req) => {
-        paid.push({
-          id: `req-${req.id}`,
-          title: req.title,
-          type: req.request_type ? `${req.request_type.toUpperCase()} PACKAGE` : "APPROVED SERVICE",
-          date: req.updated_at || req.created_at,
-          amount: Number(req.estimated_total) || 0,
-          status: "paid",
-          receipt_url: req.receipt_url,
-          rawRequest: req,
-        });
-      });
-
-      // 2. Process Active/Completed Projects with Budget
-      // (Covers active services already launched for the client without double-counting identical request titles)
-      const activeProjects = projects.filter((p) => p.budget && p.budget > 0);
-
-      activeProjects.forEach((proj) => {
-        const matchesApproved = approvedRequests.some(
-          (r) => r.title.toLowerCase().trim() === proj.name.toLowerCase().trim()
-        );
-        if (!matchesApproved && proj.budget) {
-          paid.push({
-            id: `proj-${proj.id}`,
-            title: proj.name,
-            type: "ACTIVE SERVICE STREAM",
-            date: proj.start_date || proj.created_at,
-            amount: Number(proj.budget),
-            status: "paid",
-            isProject: true,
-            rawProject: proj,
-          });
-        }
-      });
-
-      // 3. Process Formal Invoices (Paid)
-      invoices.forEach((inv) => {
-        if (inv.status === "paid" || (inv.amount_paid && inv.amount_paid > 0)) {
-          const amt = Number(inv.amount_paid || inv.total || 0);
-          paid.push({
-            id: `inv-${inv.id}`,
-            title: inv.title || `Invoice ${inv.invoice_number}`,
-            type: `INVOICE ${inv.invoice_number}`,
-            date: inv.created_at,
-            amount: amt,
-            status: "paid",
-            rawInvoice: inv,
-          });
-        }
-      });
-
-      // 4. Process Pending & Under-Review Service Requests
-      // (When client requests a service and it's not approved yet, it is OUTSTANDING)
-      const pendingRequests = requests.filter(
-        (r) => r.status === "pending" || r.status === "payment_review"
-      );
-
-      pendingRequests.forEach((req) => {
-        outstanding.push({
-          id: `pending-${req.id}`,
-          title: req.title,
-          type: req.request_type ? `${req.request_type.toUpperCase()} REQUIREMENT` : "SERVICE REQUIREMENT",
-          date: req.created_at,
-          amount: Number(req.estimated_total) || 0,
-          status: req.status === "payment_review" ? "payment_review" : "pending",
-          receipt_url: req.receipt_url,
-          requestId: req.id,
-        });
-      });
-
-      // 5. Process Formal Invoices (Unpaid Balances)
-      invoices.forEach((inv) => {
-        if (inv.status !== "paid" && inv.status !== "cancelled") {
-          const remaining = Number(inv.total || 0) - Number(inv.amount_paid || 0);
-          if (remaining > 0) {
-            outstanding.push({
-              id: `unpaid-inv-${inv.id}`,
-              title: inv.title || `Invoice ${inv.invoice_number}`,
-              type: `UNPAID INVOICE ${inv.invoice_number}`,
-              date: inv.due_date || inv.created_at,
-              amount: remaining,
-              status: "pending",
-              requestId: inv.id,
-            });
-          }
-        }
-      });
-
-      const totalPaidSum = paid.reduce((acc, item) => acc + item.amount, 0);
-      const totalOutstandingSum = outstanding.reduce((acc, item) => acc + item.amount, 0);
-      const totalCommitmentSum = totalPaidSum + totalOutstandingSum;
-
-      return {
-        paidItems: paid,
-        outstandingItems: outstanding,
-        totalPaid: totalPaidSum,
-        totalOutstanding: totalOutstandingSum,
-        totalCommitment: totalCommitmentSum,
-      };
-    }, [requests, projects, invoices]);
-
-  // Combined ledger items sorted newest first
-  const allLedgerItems = useMemo(() => {
-    const combined = [...paidItems, ...outstandingItems];
-    return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [paidItems, outstandingItems]);
 
   const filteredItems = useMemo(() => {
     if (filter === "paid") return paidItems;

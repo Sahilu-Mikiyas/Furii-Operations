@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { CircularProgress } from "@/components/shared/CircularProgress";
+import { useFinancialSummary } from "@/hooks/useFinancialSummary";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Layers,
@@ -77,6 +78,7 @@ export function ClientServicesPage() {
   const { deliverables } = useDeliverables();
   const { invoices } = useInvoices(clientId);
   const { requests, isLoading: requestsLoading } = useServiceRequests(clientId);
+  const { getServiceFinancials } = useFinancialSummary(clientId);
 
   const ongoingServices = services.filter((s) => s.status !== "completed");
   const completedServices = services.filter((s) => s.status === "completed");
@@ -204,9 +206,7 @@ export function ClientServicesPage() {
                     (d) => d.status === "awaiting_review"
                   ).length;
 
-                  const projectInvoices = invoices.filter((i) => i.project_id === service.project_id);
-                  const totalBilled = projectInvoices.reduce((acc, i) => acc + (i.total || 0), 0);
-                  const totalPaid = projectInvoices.reduce((acc, i) => acc + (i.amount_paid || 0), 0);
+                  const { totalBilled, totalPaid } = getServiceFinancials(service);
 
                   const progressVal = service.progress || 0;
 

@@ -8,6 +8,8 @@ import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { CircularProgress } from "@/components/shared/CircularProgress";
+import { useFinancialSummary } from "@/hooks/useFinancialSummary";
+import { ProductionCalendarView } from "@/components/calendar/ProductionCalendarView";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Sparkles,
@@ -36,17 +38,11 @@ export function ClientOverviewPage() {
     (a) => a.status === "awaiting_review" || a.status === "pending"
   );
 
-  const paidTotal = invoices
-    .filter((i) => i.status === "paid")
-    .reduce((acc, i) => acc + Number(i.total || i.amount || 0), 0);
-
-  const remainingTotal = invoices
-    .filter((i) => i.status === "sent" || i.status === "partially_paid")
-    .reduce(
-      (acc, i) =>
-        acc + (Number(i.total || i.amount || 0) - Number(i.amount_paid || 0)),
-      0
-    );
+  const {
+    totalPaid: paidTotal,
+    totalOutstanding: remainingTotal,
+    overallDeliveryPct,
+  } = useFinancialSummary(clientId);
 
   return (
     <motion.div
@@ -79,9 +75,9 @@ export function ClientOverviewPage() {
         <div className="p-4 rounded-xl bg-secondary/50 border border-border/80 shrink-0 sm:min-w-64 space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground font-semibold">Overall Delivery</span>
-            <span className="font-mono font-bold text-foreground text-sm">78%</span>
+            <span className="font-mono font-bold text-foreground text-sm">{overallDeliveryPct}%</span>
           </div>
-          <ProgressBar value={78} showValue={false} />
+          <ProgressBar value={overallDeliveryPct} showValue={false} />
         </div>
       </div>
 
@@ -167,70 +163,54 @@ export function ClientOverviewPage() {
         </div>
       </div>
 
-      {/* Up Next & Financial Status (Stacked for mobile) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Schedule */}
+      {/* Statement & Billing Summary (Client Owner) */}
+      {isClientOwner && (
         <div className="p-5 sm:p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-foreground">Production Timeline & Shoots</h2>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <h2 className="text-base font-bold text-foreground">Statement & Billing</h2>
+              <p className="text-xs text-muted-foreground">
+                Consolidated financials across approved service contracts and active milestones.
+              </p>
+            </div>
+            <Link
+              to="/portal/financials"
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              Full statement →
+            </Link>
           </div>
 
-          <div className="space-y-3">
-            {events.slice(0, 3).map((evt) => (
-              <div
-                key={evt.id}
-                className="p-3.5 rounded-xl bg-secondary/40 border border-border/70 flex items-center justify-between gap-3"
-              >
-                <div className="space-y-0.5 min-w-0">
-                  <p className="text-xs font-bold text-foreground truncate">{evt.title}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">{evt.description}</p>
-                </div>
-                <span className="text-xs font-mono font-bold text-primary shrink-0">
-                  {formatDate(evt.start_time, "MMM d")}
-                </span>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800 space-y-1">
+              <span className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-400 uppercase font-mono">
+                Paid to Date
+              </span>
+              <p className="text-2xl font-bold font-mono text-emerald-950 dark:text-emerald-300">
+                {formatCurrency(paidTotal, currency)}
+              </p>
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400">Verified Milestone Deposits</span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-secondary/60 border border-border space-y-1">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase font-mono">
+                Remaining Balance
+              </span>
+              <p className="text-2xl font-bold font-mono text-foreground">
+                {formatCurrency(remainingTotal, currency)}
+              </p>
+              <span className="text-[10px] text-muted-foreground">Due at Final Delivery</span>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Financial Summary (Only for Client Owner) */}
-        {isClientOwner && (
-          <div className="p-5 sm:p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-foreground">Statement & Billing</h2>
-              <Link
-                to="/portal/financials"
-                className="text-xs font-semibold text-primary hover:underline"
-              >
-                Full statement →
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-1">
-                <span className="text-[10px] font-semibold text-emerald-800 uppercase font-mono">
-                  Paid to Date
-                </span>
-                <p className="text-2xl font-bold font-mono text-emerald-950">
-                  {formatCurrency(paidTotal, currency)}
-                </p>
-                <span className="text-[10px] text-emerald-700">Verified Milestone Deposits</span>
-              </div>
-
-              <div className="p-4 rounded-xl bg-secondary/60 border border-border space-y-1">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase font-mono">
-                  Remaining Balance
-                </span>
-                <p className="text-2xl font-bold font-mono text-foreground">
-                  {formatCurrency(remainingTotal, currency)}
-                </p>
-                <span className="text-[10px] text-muted-foreground">Due at Final Delivery</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Production Timeline & Shoots (Detailed Monthly Calendar & Comment Box) */}
+      <ProductionCalendarView
+        clientId={clientId}
+        title="Production Timeline & Shoots"
+        subtitle="Detailed monthly production calendar with call sheets, shoot logistics, and dedicated client feedback."
+      />
     </motion.div>
   );
 }
