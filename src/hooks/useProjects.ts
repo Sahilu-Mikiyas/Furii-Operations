@@ -10,7 +10,7 @@ export function useProjects(clientId?: string) {
     queryFn: async (): Promise<Project[]> => {
       let req = supabase
         .from("projects")
-        .select(`*, services(id, name, service_type, status, progress)`)
+        .select(`*, services(id, name, service_type, status, progress, deleted_at)`)
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (clientId) req = req.eq("client_id", clientId);
@@ -19,7 +19,10 @@ export function useProjects(clientId?: string) {
         console.error("Projects query error:", error.message);
         return [];
       }
-      return (data || []) as Project[];
+      return ((data || []) as any[]).map((p) => ({
+        ...p,
+        services: (p.services || []).filter((s: any) => !s.deleted_at),
+      })) as Project[];
     },
   });
 

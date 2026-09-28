@@ -8,7 +8,11 @@ export function useServices(projectId?: string, clientId?: string) {
   const query = useQuery({
     queryKey: ["services", projectId || "all", clientId || "all"],
     queryFn: async (): Promise<Service[]> => {
-      let req = supabase.from("services").select("*").order("created_at", { ascending: true });
+      let req = supabase
+        .from("services")
+        .select("*")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true });
       if (projectId) req = req.eq("project_id", projectId);
       if (clientId) req = req.eq("client_id", clientId);
 
@@ -76,14 +80,36 @@ export function useServices(projectId?: string, clientId?: string) {
 
   const deleteServiceMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("services")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
+      // 1. Clean up or cascade delete associated records so foreign keys don't block
+      await Promise.allSettled([
+        supabase.from("tasks").delete().eq("service_id", id),
+        supabase.from("milestones").delete().eq("service_id", id),
+        supabase.from("deliverables").delete().eq("service_id", id),
+        supabase.from("work_records").delete().eq("service_id", id),
+        supabase.from("approvals").delete().eq("service_id", id),
+        supabase.from("decisions").delete().eq("service_id", id),
+        supabase.from("files").delete().eq("service_id", id),
+      ]);
+
+      // 2. Try hard delete first
+      const { error: hardDeleteErr } = await supabase.from("services").delete().eq("id", id);
+      if (hardDeleteErr) {
+        console.warn("Hard delete blocked, falling back to soft delete:", hardDeleteErr.message);
+        // 3. Fallback to soft delete
+        const { error: softDeleteErr } = await supabase
+          .from("services")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("id", id);
+        if (softDeleteErr) throw softDeleteErr;
+      }
       return id;
     },
-    onSuccess: () => {
+    onSuccess: (deletedId) => {
+      // Optimistically remove from all cached service queries
+      queryClient.setQueriesData({ queryKey: ["services"] }, (old: Service[] | undefined) => {
+        if (!old) return [];
+        return old.filter((s) => s.id !== deletedId);
+      });
       queryClient.invalidateQueries({ queryKey: ["services"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },

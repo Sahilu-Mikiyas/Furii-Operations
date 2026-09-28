@@ -519,9 +519,12 @@ export function ProjectsPage() {
     if (!selectedService) return;
     if (!window.confirm(`Are you sure you want to delete service "${selectedService.name}"?`)) return;
     try {
-      await deleteService(selectedService.id);
-      toast.success(`Service "${selectedService.name}" deleted.`);
-      setSelectedServiceId("");
+      const deletedId = selectedService.id;
+      const serviceName = selectedService.name;
+      const remaining = services.filter((s) => s.id !== deletedId);
+      setSelectedServiceId(remaining[0]?.id || "");
+      await deleteService(deletedId);
+      toast.success(`Service "${serviceName}" deleted.`);
     } catch (err: any) {
       toast.error(err.message || "Failed to delete service.");
     }
