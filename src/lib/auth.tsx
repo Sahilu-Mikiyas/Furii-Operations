@@ -52,17 +52,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabase.from("memberships").select("*").eq("user_id", authUser.id).maybeSingle(),
       ]);
 
-      const rawRole = (member?.role as UserRole) || (authUser.user_metadata?.role as UserRole) || "client";
+      const rawRole = (member?.role as UserRole) || (authUser.user_metadata?.role as UserRole) || null;
       
       // Normalize: all admin-type roles → "manager", all client-type → "client"
-      const normalizeRole = (r: UserRole): UserRole => {
-        if (r === "super_admin" || r === "admin" || r === "manager") return "manager";
+      const normalizeRole = (r: UserRole | null): UserRole => {
+        if (r === "super_admin" || r === "admin" || r === "manager" || r === "team_member" || r === "operations_manager") return "manager";
         if (r === "client_owner" || r === "client_member" || r === "client") return "client";
-        return "client"; // safe fallback
+        return "client"; // safe fallback for users without explicit role
       };
       const resolvedRole = normalizeRole(rawRole);
       const resolvedClientId = member?.client_id || prof?.client_id || null;
 
+      // Determine if user is truly an internal agency staff member (has a membership with an admin/team role)
+      const isInternalStaff = rawRole === "super_admin" || rawRole === "admin" || rawRole === "manager" || rawRole === "team_member" || rawRole === "operations_manager";
 
       const userProfile: Profile = prof || {
         id: authUser.id,
@@ -78,8 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(userProfile);
       setRole(resolvedRole);
 
-      // If client role, load their company record
+      // Load client data based on actual role
       if (resolvedClientId) {
+        // Client user with a bound client_id — load ONLY their company
         const { data: clientData } = await supabase
           .from("clients")
           .select("*")
@@ -89,13 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (clientData) {
           setCurrentClient(clientData as Client);
         }
-      } else {
-        // Agency internal roles: fetch all clients
+      } else if (isInternalStaff) {
+        // Agency internal roles only: fetch all clients for management views
         const { data: allClients } = await supabase.from("clients").select("*").order("name");
         if (allClients && allClients.length > 0) {
           setAvailableClients(allClients as Client[]);
           setCurrentClient(allClients[0] as Client);
         }
+      } else {
+        // Client user with no client_id binding — show empty state, NOT another client's data
+        setCurrentClient(null);
       }
     } catch (err) {
       console.warn("Auth sync error:", err);
