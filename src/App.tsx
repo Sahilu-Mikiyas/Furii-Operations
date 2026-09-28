@@ -20,6 +20,7 @@ import { ClientsPage } from "@/pages/ClientsPage";
 import { AdminRequestsPage } from "@/pages/admin/AdminRequestsPage";
 import { ProjectsPage } from "@/pages/ProjectsPage";
 import { TasksPage } from "@/pages/TasksPage";
+import { AdminChecklistsPage } from "@/pages/admin/AdminChecklistsPage";
 import { ApprovalsPage } from "@/pages/ApprovalsPage";
 import { PaymentsPage } from "@/pages/PaymentsPage";
 import { FilesPage } from "@/pages/FilesPage";
@@ -100,6 +101,14 @@ function AppRoutes() {
         element={
           <AdminGuard>
             <TasksPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/checklists"
+        element={
+          <AdminGuard>
+            <AdminChecklistsPage />
           </AdminGuard>
         }
       />

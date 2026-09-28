@@ -36,6 +36,7 @@ import { useWorkRecords } from "@/hooks/useWorkRecords";
 import { useInvoices } from "@/hooks/useInvoices";
 import { CURATED_PACKAGES } from "@/data/catalog";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useChecklists } from "@/hooks/useChecklists";
 import { useNavigate } from "react-router-dom";
 
 interface ServiceProgressDetailModalProps {
@@ -61,6 +62,7 @@ export function ServiceProgressDetailModal({
   const { deliverables } = useDeliverables(service?.id, service?.project_id);
   const { workRecords } = useWorkRecords(service?.id, service?.project_id);
   const { invoices } = useInvoices(service?.client_id);
+  const { categories: checklistCategories, items: checklistItems } = useChecklists();
 
   // Active Tab inside modal: "tasks" | "milestones" | "deliverables" | "activity" | "scope"
   const [modalTab, setModalTab] = useState<"tasks" | "milestones" | "deliverables" | "activity" | "scope">(
@@ -145,36 +147,71 @@ export function ServiceProgressDetailModal({
     (d) => d.status === "approved"
   ).length;
 
-  // Standard checklist generator for detailed subtask view
+  // Dynamic checklist generator using admin-configured categories and items
   const getSubtaskChecklist = (task: Task) => {
     const isCompleted = task.status === "completed";
     const isInReview = task.status === "in_review";
     const isInProgress = task.status === "in_progress";
 
+    if (checklistItems && checklistItems.length > 0) {
+      return checklistItems.map((item, idx) => {
+        const cat = checklistCategories.find((c) => c.id === item.category_id);
+        const autoDone =
+          item.is_completed ||
+          isCompleted ||
+          (isInReview && idx <= Math.floor(checklistItems.length * 0.75)) ||
+          (isInProgress && idx <= Math.floor(checklistItems.length * 0.4));
+
+        return {
+          id: item.id,
+          step: item.title,
+          desc: item.description,
+          categoryName: cat?.name || "Standard Quality Check",
+          categoryColor: cat?.color || "blue",
+          done: autoDone,
+        };
+      });
+    }
+
     return [
       {
+        id: "step-1",
         step: "Scope & Requirement Alignment",
         desc: "Confirmation of specifications, brief details, and asset dependencies.",
+        categoryName: "Discovery",
+        categoryColor: "blue",
         done: true,
       },
       {
+        id: "step-2",
         step: "Engineering & Visual Architecture",
         desc: "Core design layout, data structures, and component scaffolding.",
+        categoryName: "Architecture",
+        categoryColor: "purple",
         done: isCompleted || isInReview || isInProgress,
       },
       {
+        id: "step-3",
         step: "Feature Implementation & Integration",
         desc: "Deep functional execution, database integration, and UI polishing.",
+        categoryName: "Execution",
+        categoryColor: "amber",
         done: isCompleted || isInReview,
       },
       {
+        id: "step-4",
         step: "Quality Verification & Performance Testing",
         desc: "Cross-device responsiveness, speed optimization, and edge-case testing.",
+        categoryName: "QA",
+        categoryColor: "emerald",
         done: isCompleted || isInReview,
       },
       {
+        id: "step-5",
         step: "Production Deployment & Stakeholder Sign-off",
         desc: "Final delivery approval and deployment to live environment.",
+        categoryName: "Delivery",
+        categoryColor: "emerald",
         done: isCompleted,
       },
     ];
@@ -622,9 +659,16 @@ export function ServiceProgressDetailModal({
                                         {item.done ? <Check className="w-2.5 h-2.5" /> : idx + 1}
                                       </div>
 
-                                      <div className="space-y-0.5 min-w-0">
-                                        <div className={`font-semibold ${item.done ? "text-foreground" : "text-muted-foreground"}`}>
-                                          {item.step}
+                                      <div className="space-y-0.5 min-w-0 flex-1">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className={`font-semibold ${item.done ? "text-foreground" : "text-muted-foreground"}`}>
+                                            {item.step}
+                                          </div>
+                                          {item.categoryName && (
+                                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-secondary/80 text-muted-foreground border border-border/60 shrink-0">
+                                              {item.categoryName}
+                                            </span>
+                                          )}
                                         </div>
                                         <div className="text-[11px] text-muted-foreground leading-tight">
                                           {item.desc}

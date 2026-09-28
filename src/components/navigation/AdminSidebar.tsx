@@ -16,6 +16,7 @@ import {
   X,
   PanelLeftClose,
   Sparkles,
+  ListTodo,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FuriiLogo } from "@/components/shared/FuriiLogo";
@@ -33,6 +34,7 @@ const ADMIN_NAV = [
   { label: "Client Applications", href: "/admin/requests", icon: Sparkles },
   { label: "Service Streams", href: "/admin/projects", icon: Briefcase },
   { label: "Task Matrix", href: "/admin/tasks", icon: CheckSquare },
+  { label: "Checklists & QA", href: "/admin/checklists", icon: ListTodo },
   { label: "Review Queue", href: "/admin/approvals", icon: FileCheck2 },
   { label: "Financials", href: "/admin/payments", icon: Receipt },
   { label: "Asset Vault", href: "/admin/files", icon: FolderOpen },
