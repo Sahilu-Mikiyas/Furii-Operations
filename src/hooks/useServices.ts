@@ -22,7 +22,38 @@ export function useServices(projectId?: string, clientId?: string) {
         return [];
       }
 
-      return (data || []) as Service[];
+      return (data || []).map((row: any) => {
+        let billing_type = row.billing_type || "one_time";
+        let next_billing_date = row.next_billing_date || null;
+        let billing_start_date = row.billing_start_date || row.start_date || null;
+        let duration = row.duration || null;
+        let cleanSummary = row.summary || "";
+
+        if (cleanSummary.includes("[BILLING:")) {
+          try {
+            const match = cleanSummary.match(/\[BILLING:(.*?)\]/);
+            if (match && match[1]) {
+              const meta = JSON.parse(match[1]);
+              if (meta.type) billing_type = meta.type;
+              if (meta.next_billing_date) next_billing_date = meta.next_billing_date;
+              if (meta.billing_start_date) billing_start_date = meta.billing_start_date;
+              if (meta.duration) duration = meta.duration;
+              cleanSummary = cleanSummary.replace(/\[BILLING:.*?\]/, "").trim();
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        return {
+          ...row,
+          billing_type,
+          next_billing_date,
+          billing_start_date,
+          duration,
+          summary: cleanSummary,
+        };
+      }) as Service[];
     },
   });
 

@@ -30,7 +30,41 @@ export function useServiceRequests(clientId?: string) {
         return [];
       }
 
-      return (data || []) as ServiceRequest[];
+      return (data || []).map((row: any) => {
+        let contract_accepted = row.contract_accepted ?? false;
+        let contract_accepted_at = row.contract_accepted_at ?? null;
+        let billing_type = row.billing_type ?? "one_time";
+        let billing_cycle_month = row.billing_cycle_month ?? null;
+        let duration = row.duration ?? null;
+        let cleanNotes = row.payment_notes || "";
+
+        if (cleanNotes.includes("[META:")) {
+          try {
+            const match = cleanNotes.match(/\[META:(.*?)\]/);
+            if (match && match[1]) {
+              const meta = JSON.parse(match[1]);
+              if (meta.contract_accepted !== undefined) contract_accepted = meta.contract_accepted;
+              if (meta.contract_accepted_at) contract_accepted_at = meta.contract_accepted_at;
+              if (meta.billing_type) billing_type = meta.billing_type;
+              if (meta.billing_cycle_month) billing_cycle_month = meta.billing_cycle_month;
+              if (meta.duration) duration = meta.duration;
+              cleanNotes = cleanNotes.replace(/\[META:.*?\]/, "").trim();
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        return {
+          ...row,
+          contract_accepted,
+          contract_accepted_at,
+          billing_type,
+          billing_cycle_month,
+          duration,
+          payment_notes: cleanNotes,
+        };
+      }) as ServiceRequest[];
     },
   });
 
@@ -97,10 +131,10 @@ export function useServiceRequests(clientId?: string) {
       billingCycleMonth?: string;
       duration?: string;
     }) => {
-      // 0. Verify request is still eligible (only pending and no prior receipt allowed)
+      // 0. Verify request is still eligible (only select basic safe columns)
       const { data: existingReq, error: fetchError } = await supabase
         .from("service_requests")
-        .select("status, receipt_url, billing_type")
+        .select("status, receipt_url")
         .eq("id", requestId)
         .single();
 
@@ -140,33 +174,61 @@ export function useServiceRequests(clientId?: string) {
 
       const receiptUrl = publicUrlData.publicUrl;
 
-      // 2. Update service_requests record: receipt_url, payment_notes, status = 'payment_review', contract & billing
+      // 2. Pack contract & billing metadata into payment_notes for resilience
       const currentMonthStr = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
-      const updatePayload: Record<string, any> = {
-        receipt_url: receiptUrl,
-        payment_notes: notes || "",
-        payment_submitted_at: new Date().toISOString(),
+      const metaJson = JSON.stringify({
         contract_accepted: contractAccepted,
         contract_accepted_at: contractAcceptedAt,
+        billing_type: billingType,
+        billing_cycle_month: billingCycleMonth || currentMonthStr,
+        duration: duration || (billingType === "monthly_retainer" ? "Monthly Ongoing" : "4-Week Sprint"),
+      });
+
+      const packedNotes = notes ? `${notes} [META:${metaJson}]` : `[META:${metaJson}]`;
+
+      const safePayload = {
+        receipt_url: receiptUrl,
+        payment_notes: packedNotes,
+        payment_submitted_at: new Date().toISOString(),
         status: "payment_review",
         updated_at: new Date().toISOString(),
       };
 
-      if (billingType) updatePayload.billing_type = billingType;
-      if (billingCycleMonth || billingType === "monthly_retainer") {
-        updatePayload.billing_cycle_month = billingCycleMonth || currentMonthStr;
-      }
-      if (duration) updatePayload.duration = duration;
-
-      const { data, error: updateError } = await supabase
+      // Try with dedicated columns first; if DB schema cache lacks columns, fallback to safePayload
+      let updateRes = await supabase
         .from("service_requests")
-        .update(updatePayload)
+        .update({
+          ...safePayload,
+          contract_accepted: contractAccepted,
+          contract_accepted_at: contractAcceptedAt,
+          billing_type: billingType,
+          billing_cycle_month: billingCycleMonth || currentMonthStr,
+          duration: duration,
+        })
         .eq("id", requestId)
         .select()
-        .single();
+        .maybeSingle();
 
-      if (updateError) throw updateError;
-      return data as ServiceRequest;
+      if (updateRes.error && updateRes.error.message.includes("column")) {
+        updateRes = await supabase
+          .from("service_requests")
+          .update(safePayload)
+          .eq("id", requestId)
+          .select()
+          .single();
+      }
+
+      if (updateRes.error) throw updateRes.error;
+
+      return {
+        ...updateRes.data,
+        contract_accepted: contractAccepted,
+        contract_accepted_at: contractAcceptedAt,
+        billing_type: billingType,
+        billing_cycle_month: billingCycleMonth || currentMonthStr,
+        duration: duration,
+        payment_notes: notes || "",
+      } as ServiceRequest;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["service_requests"] });
@@ -235,26 +297,39 @@ export function useServiceRequests(clientId?: string) {
       else if (request.request_type === "production") serviceType = "content_production";
       else if (request.request_type === "development") serviceType = "website";
 
-      // 3. Create the Service with Billing Model
+      // 3. Create the Service with Billing Model (with resilient fallback)
       const isRetainer = request.billing_type === "monthly_retainer";
       const startDate = new Date().toISOString().split("T")[0];
       const nextDate = isRetainer
         ? new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]
         : null;
 
-      const { data: service, error: servError } = await supabase
+      const metaBilling = JSON.stringify({
+        type: request.billing_type || "one_time",
+        billing_start_date: startDate,
+        next_billing_date: nextDate,
+        billing_cycle_day: new Date().getDate(),
+        duration: request.duration || (isRetainer ? "Monthly Retainer" : "One-Time Engagement"),
+      });
+
+      const safeServicePayload = {
+        organization_id: orgId,
+        client_id: request.client_id,
+        project_id: project.id,
+        name: request.title,
+        service_type: serviceType,
+        description: request.description || "Active client delivery stream",
+        status: "in_progress",
+        current_phase: "Phase 1: Discovery & Strategy",
+        progress: 15,
+        start_date: startDate,
+        summary: `[BILLING:${metaBilling}]`,
+      };
+
+      let { data: service, error: servError } = await supabase
         .from("services")
         .insert({
-          organization_id: orgId,
-          client_id: request.client_id,
-          project_id: project.id,
-          name: request.title,
-          service_type: serviceType,
-          description: request.description || "Active client delivery stream",
-          status: "in_progress",
-          current_phase: "Phase 1: Discovery & Strategy",
-          progress: 15,
-          start_date: startDate,
+          ...safeServicePayload,
           billing_type: request.billing_type || "one_time",
           billing_start_date: startDate,
           next_billing_date: nextDate,
@@ -262,7 +337,17 @@ export function useServiceRequests(clientId?: string) {
           duration: request.duration || (isRetainer ? "Monthly Retainer" : "One-Time Engagement"),
         })
         .select()
-        .single();
+        .maybeSingle();
+
+      if (servError && servError.message.includes("column")) {
+        const fallbackRes = await supabase
+          .from("services")
+          .insert(safeServicePayload)
+          .select()
+          .single();
+        service = fallbackRes.data;
+        servError = fallbackRes.error;
+      }
 
       if (servError) throw servError;
 
