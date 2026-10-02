@@ -224,6 +224,17 @@ export function ClassifiedServicesBillingView({
                               <span>Deal PDF</span>
                             </button>
 
+                            <a
+                              href="/contracts/social-media-content-production-retainer-agreement.pdf"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1.5 rounded-lg border border-border bg-card hover:bg-secondary text-foreground font-semibold text-xs flex items-center gap-1 shadow-2xs transition-colors shrink-0"
+                              title="Inspect Full Contract Agreement Document (PDF)"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Inspect Doc ↗</span>
+                            </a>
+
                             {item.receiptUrl && (
                               <a
                                 href={item.receiptUrl}
@@ -377,6 +388,17 @@ export function ClassifiedServicesBillingView({
                       <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                       <span>Deal PDF</span>
                     </button>
+
+                    <a
+                      href="/contracts/social-media-content-production-retainer-agreement.pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1.5 rounded-lg border border-border bg-card hover:bg-secondary text-foreground font-semibold text-xs flex items-center gap-1 shadow-2xs transition-colors shrink-0"
+                      title="Inspect Full Contract Agreement Document (PDF)"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span>Inspect Doc ↗</span>
+                    </a>
 
                     {item.receiptUrl && (
                       <a

@@ -224,12 +224,14 @@ export function ContractAgreementModal({
                   <span>Download Deal PDF</span>
                 </button>
                 <a
-                  href="/contracts/sample-contract.pdf"
+                  href="/contracts/social-media-content-production-retainer-agreement.pdf"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-medium flex items-center gap-1"
+                  className="text-[11px] font-semibold text-foreground bg-secondary hover:bg-secondary/80 border border-border px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                  title="Inspect Full Contract Agreement Document (PDF)"
                 >
-                  Template ↗
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>Inspect Full Doc ↗</span>
                 </a>
               </div>
             </div>

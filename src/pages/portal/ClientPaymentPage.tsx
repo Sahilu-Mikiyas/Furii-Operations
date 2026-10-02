@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   RefreshCw,
   Download,
+  ExternalLink,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -172,30 +173,42 @@ export function ClientPaymentPage() {
         </div>
 
         <div className="flex flex-col gap-2 pt-2">
-          <button
-            type="button"
-            onClick={() => {
-              downloadContractPdf({
-                dealNumber: `DEAL-${selectedRequestId.slice(0, 8).toUpperCase()}`,
-                serviceTitle: selectedRequest?.title || "Service Engagement",
-                client: {
-                  name: currentClient?.name || "Client Partner",
-                  company: currentClient?.company || currentClient?.name,
-                },
-                billingType,
-                duration,
-                totalAmount: Number(selectedRequest?.estimated_total || 0),
-                currency,
-                receiptFileName: selectedFile?.name,
-                signedDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-                signerName: currentClient?.name,
-              });
-            }}
-            className="w-full py-2.5 bg-primary/10 hover:bg-primary/20 text-primary font-bold rounded-xl text-xs border border-primary/30 flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer"
-          >
-            <Download className="w-4 h-4" />
-            <span>Download Signed Deal PDF Certificate</span>
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                downloadContractPdf({
+                  dealNumber: `DEAL-${selectedRequestId.slice(0, 8).toUpperCase()}`,
+                  serviceTitle: selectedRequest?.title || "Service Engagement",
+                  client: {
+                    name: currentClient?.name || "Client Partner",
+                    company: currentClient?.company || currentClient?.name,
+                  },
+                  billingType,
+                  duration,
+                  totalAmount: Number(selectedRequest?.estimated_total || 0),
+                  currency,
+                  receiptFileName: selectedFile?.name,
+                  signedDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+                  signerName: currentClient?.name,
+                });
+              }}
+              className="w-full py-2.5 bg-primary/10 hover:bg-primary/20 text-primary font-bold rounded-xl text-xs border border-primary/30 flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download Signed Deal PDF</span>
+            </button>
+
+            <a
+              href="/contracts/social-media-content-production-retainer-agreement.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-2.5 bg-secondary hover:bg-secondary/80 text-foreground font-bold rounded-xl text-xs border border-border flex items-center justify-center gap-2 transition-colors shadow-2xs"
+            >
+              <ExternalLink className="w-4 h-4 text-muted-foreground" />
+              <span>Inspect Full Doc ↗</span>
+            </a>
+          </div>
 
           <button
             onClick={() => navigate("/portal/services?tab=requested")}

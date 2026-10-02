@@ -584,6 +584,17 @@ export function AdminRequestsPage() {
                         <Download className="w-3 h-3" />
                         <span>Download Deal PDF</span>
                       </button>
+
+                      <a
+                        href="/contracts/social-media-content-production-retainer-agreement.pdf"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1 rounded-md bg-secondary hover:bg-secondary/80 text-foreground border border-border font-bold text-[10px] flex items-center gap-1 shadow-2xs transition-colors"
+                        title="Inspect Full Contract Agreement Document (PDF)"
+                      >
+                        <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                        <span>Inspect Full Doc ↗</span>
+                      </a>
                       {req.contract_accepted_at && (
                         <span className="text-[10px] font-mono opacity-80">
                           {formatDate(req.contract_accepted_at)}
