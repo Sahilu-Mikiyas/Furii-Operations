@@ -5,7 +5,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useServiceRequests } from "@/hooks/useServiceRequests";
 import { useServices } from "@/hooks/useServices";
 import { CURATED_PACKAGES } from "@/data/catalog";
-import type { Service } from "@/types";
+import type { Payment, Service } from "@/types";
 
 export interface ServiceFinancialData {
   totalBilled: number;
@@ -27,6 +27,7 @@ export interface FinancialLedgerItem {
   rawRequest?: any;
   rawProject?: any;
   rawInvoice?: any;
+  rawPayment?: Payment;
 }
 
 export function useFinancialSummary(clientIdOverride?: string) {
@@ -45,49 +46,34 @@ export function useFinancialSummary(clientIdOverride?: string) {
     const paid: FinancialLedgerItem[] = [];
     const outstanding: FinancialLedgerItem[] = [];
 
-    // 1. Process Approved & Converted Service Requests
-    // (When user attached receipt and was approved, it is PAID)
-    const approvedRequests = requests.filter(
-      (r) => r.status === "approved" || r.status === "converted"
-    );
+    // 1. Recorded payment rows are the cash ledger. Keep invoice-level fallback
+    // only for legacy invoices that predate payment records.
+    const paymentsByInvoice = new Map<string, Payment[]>();
+    payments.forEach((payment) => {
+      if (!payment.invoice_id) return;
+      const invoicePayments = paymentsByInvoice.get(payment.invoice_id) || [];
+      invoicePayments.push(payment);
+      paymentsByInvoice.set(payment.invoice_id, invoicePayments);
+    });
 
-    approvedRequests.forEach((req) => {
+    payments.forEach((payment) => {
+      const invoice = invoices.find((item) => item.id === payment.invoice_id);
       paid.push({
-        id: `req-${req.id}`,
-        title: req.title,
-        type: req.request_type ? `${req.request_type.toUpperCase()} PACKAGE` : "APPROVED SERVICE",
-        date: req.updated_at || req.created_at,
-        amount: Number(req.estimated_total) || 0,
+        id: `payment-${payment.id}`,
+        title: invoice?.title || payment.reference || "Verified Payment",
+        type: invoice ? `PAYMENT FOR ${invoice.invoice_number}` : "VERIFIED PAYMENT",
+        date: payment.payment_date,
+        amount: Number(payment.amount) || 0,
         status: "paid",
-        receipt_url: req.receipt_url,
-        rawRequest: req,
+        ...(payment.receipt_url !== undefined ? { receipt_url: payment.receipt_url } : {}),
+        ...(invoice ? { rawInvoice: invoice } : {}),
+        rawPayment: payment,
       });
     });
 
-    // 2. Process Active/Completed Projects with Budget
-    // (Covers active services already launched for the client without double-counting identical request titles)
-    const activeProjects = projects.filter((p) => p.budget && p.budget > 0);
-
-    activeProjects.forEach((proj) => {
-      const matchesApproved = approvedRequests.some(
-        (r) => r.title.toLowerCase().trim() === proj.name.toLowerCase().trim()
-      );
-      if (!matchesApproved && proj.budget) {
-        paid.push({
-          id: `proj-${proj.id}`,
-          title: proj.name,
-          type: "ACTIVE SERVICE STREAM",
-          date: proj.start_date || proj.created_at,
-          amount: Number(proj.budget),
-          status: "paid",
-          isProject: true,
-          rawProject: proj,
-        });
-      }
-    });
-
-    // 3. Process Formal Invoices (Paid)
+    // 2. Process legacy formal invoices with no payment rows.
     invoices.forEach((inv) => {
+      if ((paymentsByInvoice.get(inv.id)?.length || 0) > 0) return;
       if (inv.status === "paid" || (inv.amount_paid && inv.amount_paid > 0)) {
         const amt = Number(inv.amount_paid || inv.total || inv.amount || 0);
         paid.push({
@@ -102,7 +88,7 @@ export function useFinancialSummary(clientIdOverride?: string) {
       }
     });
 
-    // 4. Process Pending & Under-Review Service Requests
+    // 3. Process Pending & Under-Review Service Requests
     // (When client requests a service and it's not approved yet, it is OUTSTANDING)
     const pendingRequests = requests.filter(
       (r) => r.status === "pending" || r.status === "payment_review"
@@ -122,7 +108,7 @@ export function useFinancialSummary(clientIdOverride?: string) {
       });
     });
 
-    // 5. Process Formal Invoices (Unpaid Balances)
+    // 4. Process Formal Invoices (Unpaid Balances)
     invoices.forEach((inv) => {
       if (inv.status !== "paid" && inv.status !== "cancelled") {
         const remaining = Number(inv.total || inv.amount || 0) - Number(inv.amount_paid || 0);
@@ -172,7 +158,7 @@ export function useFinancialSummary(clientIdOverride?: string) {
       totalContract: totalCommitmentSum,
       overallDeliveryPct,
     };
-  }, [invoices, projects, requests, services]);
+  }, [invoices, payments, projects, requests, services]);
 
   // Helper to extract real financial figures for any specific service
   const getServiceFinancials = (service: Service | null | undefined): ServiceFinancialData => {
@@ -187,10 +173,13 @@ export function useFinancialSummary(clientIdOverride?: string) {
 
     if (linkedInvoices.length > 0) {
       const billed = linkedInvoices.reduce((acc, i) => acc + Number(i.total || i.amount || 0), 0);
-      const paid = linkedInvoices.reduce(
-        (acc, i) => acc + Number(i.amount_paid || (i.status === "paid" ? (i.total || i.amount || 0) : 0)),
-        0
-      );
+      const paid = linkedInvoices.reduce((acc, invoice) => {
+        const invoicePayments = payments.filter((payment) => payment.invoice_id === invoice.id);
+        if (invoicePayments.length > 0) {
+          return acc + invoicePayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+        }
+        return acc + Number(invoice.amount_paid || (invoice.status === "paid" ? (invoice.total || invoice.amount || 0) : 0));
+      }, 0);
       return {
         totalBilled: billed,
         totalPaid: paid,
@@ -205,9 +194,9 @@ export function useFinancialSummary(clientIdOverride?: string) {
       const budget = Number(proj.budget);
       return {
         totalBilled: budget,
-        totalPaid: budget,
-        remaining: 0,
-        isFullySettled: true,
+        totalPaid: 0,
+        remaining: budget,
+        isFullySettled: false,
       };
     }
 
@@ -224,9 +213,9 @@ export function useFinancialSummary(clientIdOverride?: string) {
       const amount = Number(matchingReq.estimated_total);
       return {
         totalBilled: amount,
-        totalPaid: amount,
-        remaining: 0,
-        isFullySettled: true,
+        totalPaid: 0,
+        remaining: amount,
+        isFullySettled: false,
       };
     }
 
@@ -240,9 +229,9 @@ export function useFinancialSummary(clientIdOverride?: string) {
     if (matchedPkg && matchedPkg.price) {
       return {
         totalBilled: matchedPkg.price,
-        totalPaid: matchedPkg.price,
-        remaining: 0,
-        isFullySettled: true,
+        totalPaid: 0,
+        remaining: matchedPkg.price,
+        isFullySettled: false,
       };
     }
 
