@@ -320,8 +320,8 @@ export function useServiceRequests(clientId?: string) {
         service_type: serviceType,
         description: request.description || "Active client delivery stream",
         status: "in_progress",
-        current_phase: "Phase 1: Discovery & Strategy",
-        progress: 15,
+        current_phase: null,
+        progress: 0,
         start_date: startDate,
         summary: `[BILLING:${metaBilling}]`,
       };
@@ -351,67 +351,8 @@ export function useServiceRequests(clientId?: string) {
 
       if (servError) throw servError;
 
-      // 4. Create initial Kickoff Tasks for the team & client visibility
-      await supabase.from("tasks").insert([
-        {
-          organization_id: orgId,
-          client_id: request.client_id,
-          project_id: project.id,
-          service_id: service.id,
-          title: "Kickoff & Project Scope Alignment",
-          description: "Review catalog specifications, client brief and confirm deliverables.",
-          status: "in_progress",
-          priority: "high",
-          visibility: "client",
-          due_date: new Date(Date.now() + 3 * 86400000).toISOString().split("T")[0],
-        },
-        {
-          organization_id: orgId,
-          client_id: request.client_id,
-          project_id: project.id,
-          service_id: service.id,
-          title: "Initial Asset Collection & Briefing",
-          description: "Gather high-res brand assets, copy requirements, and access credentials.",
-          status: "planned",
-          priority: "medium",
-          visibility: "client",
-          due_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
-        },
-      ]);
-
-      // 5. Create initial Milestones
-      await supabase.from("milestones").insert([
-        {
-          organization_id: orgId,
-          project_id: project.id,
-          service_id: service.id,
-          client_id: request.client_id,
-          name: "Phase 1: Discovery & Architecture",
-          order_index: 1,
-          status: "in_progress",
-          due_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
-        },
-        {
-          organization_id: orgId,
-          project_id: project.id,
-          service_id: service.id,
-          client_id: request.client_id,
-          name: "Phase 2: Creative Production & Engineering",
-          order_index: 2,
-          status: "not_started",
-          due_date: new Date(Date.now() + 21 * 86400000).toISOString().split("T")[0],
-        },
-        {
-          organization_id: orgId,
-          project_id: project.id,
-          service_id: service.id,
-          client_id: request.client_id,
-          name: "Phase 3: Final Delivery & Handover",
-          order_index: 3,
-          status: "not_started",
-          due_date: new Date(Date.now() + 35 * 86400000).toISOString().split("T")[0],
-        },
-      ]);
+      // 4. Initial service is left completely clean & empty.
+      // Admin/manager will populate milestones, tasks, deliverables, and phases as needed.
 
       // 6. Create settled Invoice & Payment record for official accounting
       try {

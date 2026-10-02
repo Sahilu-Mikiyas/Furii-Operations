@@ -41,7 +41,7 @@ export function ClientServicesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
 
-  const { currentClient, currency } = useAuth();
+  const { currentClient, currency, role } = useAuth();
   const clientId = currentClient?.id;
 
   // Detail Progress Modal State
@@ -53,6 +53,21 @@ export function ClientServicesPage() {
     (tabParam as any) || "ongoing"
   );
 
+  // Ongoing Sub-Hubs: "all" | "retainers" | "one_time"
+  const subParam = searchParams.get("sub");
+  const [ongoingSubHub, setOngoingSubHub] = useState<"all" | "retainers" | "one_time">(
+    subParam === "retainers" || subParam === "one_time" ? subParam : "all"
+  );
+
+  const handleSubHubChange = (sub: "all" | "retainers" | "one_time") => {
+    setOngoingSubHub(sub);
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      p.set("sub", sub);
+      return p;
+    });
+  };
+
   useEffect(() => {
     if (tabParam && ["ongoing", "completed", "requested"].includes(tabParam)) {
       setActiveTab(tabParam as any);
@@ -61,7 +76,7 @@ export function ClientServicesPage() {
 
   const handleTabChange = (tab: "ongoing" | "completed" | "requested") => {
     setActiveTab(tab);
-    setSearchParams({ tab });
+    setSearchParams({ tab, sub: ongoingSubHub });
   };
 
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
@@ -82,6 +97,20 @@ export function ClientServicesPage() {
 
   const ongoingServices = services.filter((s) => s.status !== "completed");
   const completedServices = services.filter((s) => s.status === "completed");
+
+  const retainerServices = ongoingServices.filter(
+    (s) => s.billing_type === "monthly_retainer" || s.name.toLowerCase().includes("retainer")
+  );
+  const oneTimeServices = ongoingServices.filter(
+    (s) => s.billing_type !== "monthly_retainer" && !s.name.toLowerCase().includes("retainer")
+  );
+
+  const displayedOngoingServices =
+    ongoingSubHub === "retainers"
+      ? retainerServices
+      : ongoingSubHub === "one_time"
+      ? oneTimeServices
+      : ongoingServices;
 
   const isLoading = projectsLoading || servicesLoading || requestsLoading;
 
@@ -172,23 +201,100 @@ export function ClientServicesPage() {
           {/* ======================================================== */}
           {activeTab === "ongoing" && (
             <div className="space-y-4">
-              {ongoingServices.length === 0 ? (
-                <div className="p-12 text-center bg-card rounded-2xl border border-border shadow-2xs space-y-3">
-                  <Layers className="w-8 h-8 text-muted-foreground mx-auto" />
-                  <h3 className="text-sm font-bold text-foreground">No Ongoing Services</h3>
-                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                    You currently have no active delivery streams in progress. Select a package from the catalog to get started.
+              {/* Sub-Hubs Navigation for Ongoing Streams */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-card border border-border shadow-2xs">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <span>Ongoing Delivery Streams</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Segregated by commercial structure: recurring monthly retainers and fixed one-time offers.
                   </p>
+                </div>
+
+                <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-xl border border-border/80 shrink-0">
                   <button
-                    onClick={() => navigate("/portal/catalog")}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+                    onClick={() => handleSubHubChange("all")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      ongoingSubHub === "all"
+                        ? "bg-card text-foreground shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    Explore Catalog
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>All Ongoing</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-secondary text-muted-foreground">
+                      {ongoingServices.length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSubHubChange("retainers")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      ongoingSubHub === "retainers"
+                        ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold border border-purple-500/30 shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                    <span>Monthly Retainers</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-700 dark:text-purple-300 font-bold">
+                      {retainerServices.length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSubHubChange("one_time")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      ongoingSubHub === "one_time"
+                        ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 font-bold border border-blue-500/30 shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>One-Time Deals</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 font-bold">
+                      {oneTimeServices.length}
+                    </span>
                   </button>
                 </div>
+              </div>
+
+              {displayedOngoingServices.length === 0 ? (
+                <div className="p-12 text-center bg-card rounded-2xl border border-dashed border-border shadow-2xs space-y-3">
+                  {ongoingSubHub === "retainers" ? (
+                    <Calendar className="w-8 h-8 text-purple-600 dark:text-purple-400 mx-auto opacity-70" />
+                  ) : ongoingSubHub === "one_time" ? (
+                    <Clock className="w-8 h-8 text-blue-600 dark:text-blue-400 mx-auto opacity-70" />
+                  ) : (
+                    <Layers className="w-8 h-8 text-muted-foreground mx-auto" />
+                  )}
+                  <h3 className="text-sm font-bold text-foreground">
+                    {ongoingSubHub === "retainers"
+                      ? "No Active Monthly Retainers"
+                      : ongoingSubHub === "one_time"
+                      ? "No Active One-Time Deals"
+                      : "No Ongoing Services"}
+                  </h3>
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                    {ongoingSubHub === "retainers"
+                      ? "There are currently no active monthly retainer subscriptions for this client account."
+                      : ongoingSubHub === "one_time"
+                      ? "There are currently no active fixed-duration or one-time project engagements for this client account."
+                      : "You currently have no active delivery streams in progress. Select a package from the catalog to get started."}
+                  </p>
+                  {ongoingSubHub === "all" && (
+                    <button
+                      onClick={() => navigate("/portal/catalog")}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Explore Catalog
+                    </button>
+                  )}
+                </div>
               ) : (
-                ongoingServices.map((service) => {
+                displayedOngoingServices.map((service) => {
                   const isExpanded = !!expandedIds[service.id];
                   const serviceTasks = tasks.filter(
                     (t) => t.service_id === service.id || t.project_id === service.project_id
@@ -208,7 +314,10 @@ export function ClientServicesPage() {
 
                   const { totalBilled, totalPaid } = getServiceFinancials(service);
 
-                  const progressVal = service.progress || 0;
+                  const progressVal =
+                    serviceTasks.length > 0
+                      ? Math.round((completedTasksCount / serviceTasks.length) * 100)
+                      : service.progress || 0;
 
                   return (
                     <div
@@ -287,7 +396,7 @@ export function ClientServicesPage() {
                                     ? `${completedTasksCount}/${serviceTasks.length} Tasks`
                                     : progressVal === 100
                                     ? "Completed"
-                                    : "Active Phase"
+                                    : "0 Tasks"
                                 }
                               />
                             </div>
@@ -352,7 +461,7 @@ export function ClientServicesPage() {
                             <div className="space-y-3">
                               <div className="flex items-center justify-between">
                                 <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                                  Sub-Tasks ({completedTasksCount}/{serviceTasks.length} Completed)
+                                  Sub-Tasks ({serviceTasks.length > 0 ? `${completedTasksCount}/${serviceTasks.length} Completed` : "0 Assigned"})
                                 </h4>
                                 <button
                                   type="button"
@@ -368,7 +477,9 @@ export function ClientServicesPage() {
                               </div>
 
                               {serviceTasks.length === 0 ? (
-                                <p className="text-xs text-muted-foreground italic">No sub-tasks listed for this service.</p>
+                                <div className="p-3.5 rounded-xl bg-card border border-dashed border-border/80 text-xs text-muted-foreground italic text-center">
+                                  No tasks assigned yet. Operations will publish checklist items as work proceeds.
+                                </div>
                               ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                                   {serviceTasks.map((task) => {
@@ -764,6 +875,7 @@ export function ClientServicesPage() {
         }}
         initialTaskId={selectedTaskId}
         currency={currency}
+        isManager={role === "owner" || role === "operations_manager" || role === "lead_creative" || role === "creative"}
       />
     </motion.div>
   );

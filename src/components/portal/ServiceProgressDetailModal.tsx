@@ -25,15 +25,19 @@ import {
   Award,
   Circle,
   FileSignature,
+  Plus,
+  Loader2,
 } from "lucide-react";
 import type {
   Service,
   Task,
+  TaskPriority,
   Milestone,
   Deliverable,
   WorkRecord,
   Currency,
 } from "@/types";
+import { toast } from "sonner";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { CircularProgress } from "@/components/shared/CircularProgress";
@@ -93,6 +97,7 @@ interface ServiceProgressDetailModalProps {
   onClose: () => void;
   initialTaskId?: string | null;
   currency?: Currency;
+  isManager?: boolean;
 }
 
 export function ServiceProgressDetailModal({
@@ -101,19 +106,91 @@ export function ServiceProgressDetailModal({
   onClose,
   initialTaskId,
   currency = "ETB",
+  isManager: isManagerProp,
 }: ServiceProgressDetailModalProps) {
   const navigate = useNavigate();
   const { currentClient, role } = useAuth();
-  const isManager = role === "super_admin" || role === "admin" || role === "operations_manager";
+  const isManager =
+    isManagerProp !== undefined
+      ? isManagerProp
+      : role === "super_admin" ||
+        role === "admin" ||
+        role === "owner" ||
+        role === "operations_manager" ||
+        role === "lead_creative" ||
+        role === "creative";
 
-  // Scoped queries (Read-Only on client side)
-  const { tasks } = useTasks(service?.id, service?.project_id);
-  const { milestones } = useMilestones(service?.id, service?.project_id);
+  // Scoped queries
+  const { tasks, createTask } = useTasks(service?.id, service?.project_id);
+  const { milestones, createMilestone } = useMilestones(service?.id, service?.project_id);
   const { deliverables } = useDeliverables(service?.id, service?.project_id);
   const { workRecords } = useWorkRecords(service?.id, service?.project_id);
   const { invoices } = useInvoices(service?.client_id);
   const { getServiceFinancials } = useFinancialSummary(service?.client_id);
   const { categories: checklistCategories, items: checklistItems } = useChecklists();
+
+  // Manager quick add task / milestone states
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>("medium");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
+
+  const [showAddMilestone, setShowAddMilestone] = useState(false);
+  const [newMilestoneName, setNewMilestoneName] = useState("");
+  const [newMilestoneDueDate, setNewMilestoneDueDate] = useState("");
+  const [isSubmittingMilestone, setIsSubmittingMilestone] = useState(false);
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim() || !service) return;
+    setIsSubmittingTask(true);
+    try {
+      await createTask({
+        title: newTaskTitle.trim(),
+        service_id: service.id,
+        project_id: service.project_id,
+        client_id: service.client_id,
+        priority: newTaskPriority,
+        due_date: newTaskDueDate || null,
+        status: "planned",
+        visibility: "client",
+      });
+      toast.success("Task added to service!");
+      setNewTaskTitle("");
+      setNewTaskDueDate("");
+      setShowAddTask(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create task");
+    } finally {
+      setIsSubmittingTask(false);
+    }
+  };
+
+  const handleCreateMilestone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMilestoneName.trim() || !service) return;
+    setIsSubmittingMilestone(true);
+    try {
+      await createMilestone({
+        name: newMilestoneName.trim(),
+        service_id: service.id,
+        project_id: service.project_id,
+        client_id: service.client_id,
+        due_date: newMilestoneDueDate || null,
+        status: "not_started",
+        order_index: serviceMilestones.length + 1,
+      });
+      toast.success("Milestone phase created!");
+      setNewMilestoneName("");
+      setNewMilestoneDueDate("");
+      setShowAddMilestone(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create milestone");
+    } finally {
+      setIsSubmittingMilestone(false);
+    }
+  };
 
   // Active Tab inside modal: "tasks" | "milestones" | "deliverables" | "contracts" | "activity" | "scope"
   const [modalTab, setModalTab] = useState<"tasks" | "milestones" | "deliverables" | "contracts" | "activity" | "scope">(
@@ -250,43 +327,7 @@ export function ServiceProgressDetailModal({
       });
     }
 
-    return [
-      {
-        id: "step-1",
-        step: "Scope & Requirement Alignment",
-        desc: "Confirmation of specifications, brief details, and asset dependencies.",
-        categoryName: "Discovery",
-        done: true,
-      },
-      {
-        id: "step-2",
-        step: "Engineering & Visual Architecture",
-        desc: "Core design layout, data structures, and component scaffolding.",
-        categoryName: "Architecture",
-        done: isCompleted || isInReview || isInProgress,
-      },
-      {
-        id: "step-3",
-        step: "Feature Implementation & Integration",
-        desc: "Deep functional execution, database integration, and UI polishing.",
-        categoryName: "Execution",
-        done: isCompleted || isInReview,
-      },
-      {
-        id: "step-4",
-        step: "Quality Verification & Performance Testing",
-        desc: "Cross-device responsiveness, speed optimization, and edge-case testing.",
-        categoryName: "QA",
-        done: isCompleted || isInReview,
-      },
-      {
-        id: "step-5",
-        step: "Production Deployment & Stakeholder Sign-off",
-        desc: "Final delivery approval and deployment to live environment.",
-        categoryName: "Delivery",
-        done: isCompleted,
-      },
-    ];
+    return [];
   };
 
   return (
@@ -592,17 +633,98 @@ export function ServiceProgressDetailModal({
                   })}
                 </div>
 
-                <div className="relative w-full sm:w-60">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Search checklist..."
-                    value={taskSearch}
-                    onChange={(e) => setTaskSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-secondary/30 border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:border-primary"
-                  />
+                <div className="flex items-center gap-2">
+                  <div className="relative w-full sm:w-52">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search checklist..."
+                      value={taskSearch}
+                      onChange={(e) => setTaskSearch(e.target.value)}
+                      className="w-full pl-9 pr-3 py-1.5 text-xs bg-secondary/30 border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+
+                  {isManager && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddTask((prev) => !prev)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs shrink-0 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Task</span>
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* Inline Add Task Form for Manager */}
+              {isManager && showAddTask && (
+                <form
+                  onSubmit={handleCreateTask}
+                  className="p-3.5 rounded-xl bg-secondary/30 border border-border space-y-3 animate-in fade-in duration-150"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-foreground flex items-center gap-1">
+                      <Plus className="w-3.5 h-3.5 text-primary" />
+                      Add New Sub-Task
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddTask(false)}
+                      className="text-muted-foreground hover:text-foreground text-xs cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Task title..."
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg border border-border bg-card text-foreground focus:outline-hidden focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="date"
+                        value={newTaskDueDate}
+                        onChange={(e) => setNewTaskDueDate(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg border border-border bg-card text-foreground focus:outline-hidden font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground font-mono">Priority:</span>
+                      <select
+                        value={newTaskPriority}
+                        onChange={(e) => setNewTaskPriority(e.target.value as TaskPriority)}
+                        className="px-2 py-1 text-xs rounded border border-border bg-card text-foreground font-mono cursor-pointer"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmittingTask || !newTaskTitle.trim()}
+                      className="px-4 py-1.5 rounded-lg text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      {isSubmittingTask && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      Save Task
+                    </button>
+                  </div>
+                </form>
+              )}
 
               {/* Tasks List */}
               {filteredTasks.length === 0 ? (
@@ -612,8 +734,20 @@ export function ServiceProgressDetailModal({
                   <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
                     {taskSearch || taskFilter !== "all"
                       ? "No tasks match your current filter."
+                      : isManager
+                      ? "This service has no tasks yet. Use 'Add Task' above to create checklist items for this client."
                       : "The execution team will publish progress checklist items as work advances."}
                   </p>
+                  {isManager && !showAddTask && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddTask(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer mt-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add First Task</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -804,18 +938,81 @@ export function ServiceProgressDetailModal({
                   <h3 className="text-sm font-bold text-foreground">Delivery Milestone Roadmap</h3>
                   <p className="text-xs text-muted-foreground">Phased progression and milestone achievement milestones</p>
                 </div>
-                <span className="text-xs font-mono font-semibold text-foreground bg-secondary px-2.5 py-1 rounded-lg border border-border">
-                  {completedMilestonesCount} of {serviceMilestones.length} Completed
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-semibold text-foreground bg-secondary px-2.5 py-1 rounded-lg border border-border">
+                    {completedMilestonesCount} of {serviceMilestones.length} Completed
+                  </span>
+                  {isManager && (
+                    <button
+                      onClick={() => setShowAddMilestone((v) => !v)}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Milestone
+                    </button>
+                  )}
+                </div>
               </div>
 
+              {/* Inline Add Milestone Form */}
+              {isManager && showAddMilestone && (
+                <form
+                  onSubmit={handleCreateMilestone}
+                  className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-3"
+                >
+                  <h4 className="text-xs font-bold text-foreground">New Milestone Phase</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      placeholder="Milestone name…"
+                      value={newMilestoneName}
+                      onChange={(e) => setNewMilestoneName(e.target.value)}
+                      className="w-full text-xs px-3 py-2 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      required
+                    />
+                    <input
+                      type="date"
+                      value={newMilestoneDueDate}
+                      onChange={(e) => setNewMilestoneDueDate(e.target.value)}
+                      className="w-full text-xs px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => { setShowAddMilestone(false); setNewMilestoneName(""); setNewMilestoneDueDate(""); }}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:bg-secondary transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingMilestone || !newMilestoneName.trim()}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                    >
+                      {isSubmittingMilestone ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                      Create Phase
+                    </button>
+                  </div>
+                </form>
+              )}
+
               {serviceMilestones.length === 0 ? (
-                <div className="p-8 text-center bg-secondary/20 rounded-xl border border-dashed border-border space-y-2">
+                <div className="p-8 text-center bg-secondary/20 rounded-xl border border-dashed border-border space-y-3">
                   <Layers className="w-8 h-8 text-muted-foreground mx-auto" />
                   <div className="text-xs font-bold text-foreground">No Milestones Outlined</div>
                   <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
                     The project management team will formalize delivery phases and checkpoints for this stream.
                   </p>
+                  {isManager && !showAddMilestone && (
+                    <button
+                      onClick={() => setShowAddMilestone(true)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add First Milestone
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
