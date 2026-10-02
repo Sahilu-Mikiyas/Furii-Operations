@@ -12,9 +12,11 @@ import {
   Receipt,
   Loader2,
   AlertCircle,
+  Download,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { BillingType, Currency } from "@/types";
+import { downloadContractPdf } from "@/lib/contractPdfGenerator";
 
 interface ContractAgreementModalProps {
   isOpen: boolean;
@@ -49,6 +51,24 @@ export function ContractAgreementModal({
 }: ContractAgreementModalProps) {
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [agreedAuthenticity, setAgreedAuthenticity] = useState(false);
+
+  const handleDownloadDealPdf = () => {
+    downloadContractPdf({
+      dealNumber: `DEAL-${Date.now().toString(36).toUpperCase()}`,
+      serviceTitle,
+      client: {
+        name: clientName,
+        company: clientName,
+      },
+      billingType,
+      duration,
+      totalAmount: amount,
+      currency,
+      receiptFileName: fileName,
+      signedDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      signerName: clientName,
+    });
+  };
 
   if (!isOpen) return null;
 
@@ -194,15 +214,24 @@ export function ContractAgreementModal({
                 <FileText className="w-3.5 h-3.5 text-primary" />
                 Standard Terms of Engagement
               </span>
-              <a
-                href="/contracts/sample-contract.pdf"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1"
-              >
-                Inspect Full PDF Document
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadDealPdf}
+                  className="text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Deal PDF</span>
+                </button>
+                <a
+                  href="/contracts/sample-contract.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-medium flex items-center gap-1"
+                >
+                  Template ↗
+                </a>
+              </div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-secondary/20 border border-border/80 text-[11px] text-muted-foreground space-y-2 max-h-40 overflow-y-auto font-sans leading-relaxed">

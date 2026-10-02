@@ -13,8 +13,10 @@ import {
   AlertCircle,
   CheckCircle2,
   ArrowUpRight,
+  Download,
 } from "lucide-react";
 import type { Currency } from "@/types";
+import { downloadContractPdf } from "@/lib/contractPdfGenerator";
 
 interface RetainerItem {
   id: string;
@@ -196,6 +198,32 @@ export function ClassifiedServicesBillingView({
                               </span>
                             </div>
 
+                            <button
+                              type="button"
+                              onClick={() => {
+                                downloadContractPdf({
+                                  dealNumber: `DEAL-${item.id.slice(0, 8).toUpperCase()}`,
+                                  serviceTitle: item.name,
+                                  client: {
+                                    name: item.clientName,
+                                    company: item.clientName,
+                                  },
+                                  billingType: "monthly_retainer",
+                                  duration: "Monthly Ongoing",
+                                  totalAmount: item.amount,
+                                  currency: (item.currency as any) || currency,
+                                  receiptFileName: item.receiptUrl ? "Payment Slip Verified" : undefined,
+                                  signedDate: item.month,
+                                  signerName: item.clientName,
+                                });
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg border border-border bg-card hover:bg-secondary text-foreground font-semibold text-xs flex items-center gap-1 shadow-2xs transition-colors shrink-0 cursor-pointer"
+                              title="Download Signed Deal Agreement PDF"
+                            >
+                              <Download className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                              <span>Deal PDF</span>
+                            </button>
+
                             {item.receiptUrl && (
                               <a
                                 href={item.receiptUrl}
@@ -323,6 +351,32 @@ export function ClassifiedServicesBillingView({
                         {item.status}
                       </span>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        downloadContractPdf({
+                          dealNumber: `DEAL-${item.id.slice(0, 8).toUpperCase()}`,
+                          serviceTitle: item.name,
+                          client: {
+                            name: item.clientName,
+                            company: item.clientName,
+                          },
+                          billingType: "one_time",
+                          duration: item.duration,
+                          totalAmount: item.amount,
+                          currency: (item.currency as any) || currency,
+                          receiptFileName: item.receiptUrl ? "Payment Slip Verified" : undefined,
+                          signedDate: formatDate(item.startDate || new Date().toISOString()),
+                          signerName: item.clientName,
+                        });
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg border border-border bg-card hover:bg-secondary text-foreground font-semibold text-xs flex items-center gap-1 shadow-2xs transition-colors shrink-0 cursor-pointer"
+                      title="Download Signed Deal Agreement PDF"
+                    >
+                      <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>Deal PDF</span>
+                    </button>
 
                     {item.receiptUrl && (
                       <a

@@ -29,10 +29,12 @@ import {
   ShieldCheck,
   Calendar,
   Layers,
+  Download,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ReceiptInvoiceModal } from "@/components/shared/ReceiptInvoiceModal";
 import type { ReceiptPdfData } from "@/lib/invoicePdfGenerator";
+import { downloadContractPdf } from "@/lib/contractPdfGenerator";
 
 export function AdminRequestsPage() {
   const { currency } = useAuth();
@@ -548,16 +550,46 @@ export function AdminRequestsPage() {
 
                 {/* Contract Acceptance Verification Status */}
                 {req.contract_accepted ? (
-                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-400">
+                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-emerald-700 dark:text-emerald-400">
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span className="font-semibold">Contract Agreed & Digitally Signed by Client</span>
                     </div>
-                    {req.contract_accepted_at && (
-                      <span className="text-[10px] font-mono opacity-80">
-                        {formatDate(req.contract_accepted_at)}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const client = clients.find((c) => c.id === req.client_id) || req.client;
+                          downloadContractPdf({
+                            dealNumber: `DEAL-${req.id.slice(0, 8).toUpperCase()}`,
+                            serviceTitle: req.title,
+                            client: {
+                              name: client?.name || "Client Partner",
+                              company: client?.company || client?.name,
+                              email: client?.email,
+                              phone: client?.phone,
+                            },
+                            billingType: req.billing_type || "one_time",
+                            duration: req.duration,
+                            totalAmount: Number(req.estimated_total || 0),
+                            currency: (req.currency as any) || "ETB",
+                            receiptFileName: req.payment_notes || "Receipt Slip Attached",
+                            signedDate: req.contract_accepted_at ? formatDate(req.contract_accepted_at) : formatDate(req.created_at),
+                            signerName: client?.name,
+                          });
+                          toast.success("Downloaded Signed Deal Contract PDF.");
+                        }}
+                        className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>Download Deal PDF</span>
+                      </button>
+                      {req.contract_accepted_at && (
+                        <span className="text-[10px] font-mono opacity-80">
+                          {formatDate(req.contract_accepted_at)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="p-2 bg-secondary/30 border border-border/70 rounded-xl flex items-center justify-between text-xs text-muted-foreground">

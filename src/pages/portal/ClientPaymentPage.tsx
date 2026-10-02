@@ -18,11 +18,13 @@ import {
   Layers,
   ShieldCheck,
   RefreshCw,
+  Download,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { ContractAgreementModal } from "@/components/portal/ContractAgreementModal";
 import type { BillingType } from "@/types";
+import { downloadContractPdf } from "@/lib/contractPdfGenerator";
 
 export function ClientPaymentPage() {
   const navigate = useNavigate();
@@ -170,6 +172,31 @@ export function ClientPaymentPage() {
         </div>
 
         <div className="flex flex-col gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              downloadContractPdf({
+                dealNumber: `DEAL-${selectedRequestId.slice(0, 8).toUpperCase()}`,
+                serviceTitle: selectedRequest?.title || "Service Engagement",
+                client: {
+                  name: currentClient?.name || "Client Partner",
+                  company: currentClient?.company || currentClient?.name,
+                },
+                billingType,
+                duration,
+                totalAmount: Number(selectedRequest?.estimated_total || 0),
+                currency,
+                receiptFileName: selectedFile?.name,
+                signedDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+                signerName: currentClient?.name,
+              });
+            }}
+            className="w-full py-2.5 bg-primary/10 hover:bg-primary/20 text-primary font-bold rounded-xl text-xs border border-primary/30 flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>Download Signed Deal PDF Certificate</span>
+          </button>
+
           <button
             onClick={() => navigate("/portal/services?tab=requested")}
             className="w-full py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
