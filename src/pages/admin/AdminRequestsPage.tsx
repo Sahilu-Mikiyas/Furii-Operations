@@ -27,6 +27,8 @@ import {
   ChevronDown,
   Filter,
   ShieldCheck,
+  Calendar,
+  Layers,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ReceiptInvoiceModal } from "@/components/shared/ReceiptInvoiceModal";
@@ -469,6 +471,19 @@ export function AdminRequestsPage() {
                         {req.status.replace("_", " ")}
                       </span>
 
+                      {/* Billing Model Tag */}
+                      {req.billing_type === "monthly_retainer" ? (
+                        <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-bold flex items-center gap-1">
+                          <Calendar className="w-2.5 h-2.5" />
+                          Retainer · {req.billing_cycle_month || "Monthly"}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-bold flex items-center gap-1">
+                          <Layers className="w-2.5 h-2.5" />
+                          One-Time · {req.duration || "Fixed Scope"}
+                        </span>
+                      )}
+
                       {req.urgency && req.urgency !== "normal" && (
                         <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 font-bold">
                           {req.urgency}
@@ -528,6 +543,28 @@ export function AdminRequestsPage() {
                       <ExternalLink className="w-3.5 h-3.5" />
                       Inspect Receipt File ↗
                     </a>
+                  </div>
+                )}
+
+                {/* Contract Acceptance Verification Status */}
+                {req.contract_accepted ? (
+                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-400">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="font-semibold">Contract Agreed & Digitally Signed by Client</span>
+                    </div>
+                    {req.contract_accepted_at && (
+                      <span className="text-[10px] font-mono opacity-80">
+                        {formatDate(req.contract_accepted_at)}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-2 bg-secondary/30 border border-border/70 rounded-xl flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span>Contract Terms Agreement Pending Signature</span>
+                    </div>
                   </div>
                 )}
 

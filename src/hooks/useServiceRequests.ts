@@ -82,15 +82,25 @@ export function useServiceRequests(clientId?: string) {
       requestId,
       file,
       notes,
+      contractAccepted = true,
+      contractAcceptedAt = new Date().toISOString(),
+      billingType = "one_time",
+      billingCycleMonth,
+      duration,
     }: {
       requestId: string;
       file: File;
       notes?: string;
+      contractAccepted?: boolean;
+      contractAcceptedAt?: string;
+      billingType?: BillingType;
+      billingCycleMonth?: string;
+      duration?: string;
     }) => {
       // 0. Verify request is still eligible (only pending and no prior receipt allowed)
       const { data: existingReq, error: fetchError } = await supabase
         .from("service_requests")
-        .select("status, receipt_url")
+        .select("status, receipt_url, billing_type")
         .eq("id", requestId)
         .single();
 
@@ -130,16 +140,27 @@ export function useServiceRequests(clientId?: string) {
 
       const receiptUrl = publicUrlData.publicUrl;
 
-      // 2. Update service_requests record: receipt_url, payment_notes, status = 'payment_review'
+      // 2. Update service_requests record: receipt_url, payment_notes, status = 'payment_review', contract & billing
+      const currentMonthStr = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
+      const updatePayload: Record<string, any> = {
+        receipt_url: receiptUrl,
+        payment_notes: notes || "",
+        payment_submitted_at: new Date().toISOString(),
+        contract_accepted: contractAccepted,
+        contract_accepted_at: contractAcceptedAt,
+        status: "payment_review",
+        updated_at: new Date().toISOString(),
+      };
+
+      if (billingType) updatePayload.billing_type = billingType;
+      if (billingCycleMonth || billingType === "monthly_retainer") {
+        updatePayload.billing_cycle_month = billingCycleMonth || currentMonthStr;
+      }
+      if (duration) updatePayload.duration = duration;
+
       const { data, error: updateError } = await supabase
         .from("service_requests")
-        .update({
-          receipt_url: receiptUrl,
-          payment_notes: notes || "",
-          payment_submitted_at: new Date().toISOString(),
-          status: "payment_review",
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq("id", requestId)
         .select()
         .single();
@@ -214,7 +235,13 @@ export function useServiceRequests(clientId?: string) {
       else if (request.request_type === "production") serviceType = "content_production";
       else if (request.request_type === "development") serviceType = "website";
 
-      // 3. Create the Service
+      // 3. Create the Service with Billing Model
+      const isRetainer = request.billing_type === "monthly_retainer";
+      const startDate = new Date().toISOString().split("T")[0];
+      const nextDate = isRetainer
+        ? new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]
+        : null;
+
       const { data: service, error: servError } = await supabase
         .from("services")
         .insert({
@@ -227,6 +254,12 @@ export function useServiceRequests(clientId?: string) {
           status: "in_progress",
           current_phase: "Phase 1: Discovery & Strategy",
           progress: 15,
+          start_date: startDate,
+          billing_type: request.billing_type || "one_time",
+          billing_start_date: startDate,
+          next_billing_date: nextDate,
+          billing_cycle_day: new Date().getDate(),
+          duration: request.duration || (isRetainer ? "Monthly Retainer" : "One-Time Engagement"),
         })
         .select()
         .single();

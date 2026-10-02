@@ -53,6 +53,7 @@ export type ClientHealthStatus = "on_track" | "attention_required" | "waiting_fo
 
 export type ServiceRequestStatus = "pending" | "payment_review" | "approved" | "declined" | "converted";
 export type ServiceRequestType = "package" | "development" | "branding" | "production" | "custom";
+export type BillingType = "one_time" | "monthly_retainer";
 
 // ─────────────────────────────────────────────
 // Base
@@ -183,6 +184,11 @@ export interface Service extends BaseRecord {
   start_date?: string | null;
   target_date?: string | null;
   summary?: string | null;
+  billing_type?: BillingType | null;
+  billing_cycle_day?: number | null;
+  billing_start_date?: string | null;
+  next_billing_date?: string | null;
+  duration?: string | null;
   // joined
   project?: Project;
   milestones?: Milestone[];
@@ -535,6 +541,11 @@ export interface ServiceRequest extends BaseRecord {
   receipt_url?: string | null;
   payment_notes?: string | null;
   payment_submitted_at?: string | null;
+  contract_accepted?: boolean | null;
+  contract_accepted_at?: string | null;
+  billing_type?: BillingType | null;
+  billing_cycle_month?: string | null;
+  duration?: string | null;
   // joined
   client?: Client;
   submitter?: Profile;

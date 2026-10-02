@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useServiceRequests } from "@/hooks/useServiceRequests";
+import { useServices } from "@/hooks/useServices";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
@@ -12,9 +13,16 @@ import {
   ArrowLeft,
   Clock,
   AlertCircle,
+  FileSignature,
+  Calendar,
+  Layers,
+  ShieldCheck,
+  RefreshCw,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { ContractAgreementModal } from "@/components/portal/ContractAgreementModal";
+import type { BillingType } from "@/types";
 
 export function ClientPaymentPage() {
   const navigate = useNavigate();
@@ -23,12 +31,18 @@ export function ClientPaymentPage() {
 
   const { currentClient, currency } = useAuth();
   const { requests, isLoading, submitReceipt, isSubmittingReceipt } = useServiceRequests();
+  const { services: clientServices } = useServices(undefined, currentClient?.id);
 
   const [selectedRequestId, setSelectedRequestId] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [paymentNotes, setPaymentNotes] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  // Contract Terms Modal State & Billing Model
+  const [showContractModal, setShowContractModal] = useState(false);
+  const [billingType, setBillingType] = useState<BillingType>("one_time");
+  const [duration, setDuration] = useState<string>("4-Week Fixed Sprint");
 
   // Only pending requests without any attached receipt are eligible to be attached a receipt for.
   // Once in the ongoing phase (approved/converted) or once a receipt has already been attached, it is completely out of the list!
@@ -44,6 +58,11 @@ export function ClientPaymentPage() {
     (r) => r.status === "approved" || r.status === "converted"
   );
 
+  // Active Monthly Retainer Services that may require cycle renewal
+  const activeRetainerServices = clientServices.filter(
+    (s) => s.billing_type === "monthly_retainer" && s.status !== "completed"
+  );
+
   useEffect(() => {
     if (preselectedId && requests.some((r) => r.id === preselectedId)) {
       setSelectedRequestId(preselectedId);
@@ -56,6 +75,13 @@ export function ClientPaymentPage() {
   const isSelectedOngoing = selectedRequest?.status === "approved" || selectedRequest?.status === "converted";
   const isSelectedAlreadySubmitted = !isSelectedOngoing && (selectedRequest?.status === "payment_review" || !!selectedRequest?.receipt_url);
   const isSelectedEligible = selectedRequest?.status === "pending" && !selectedRequest?.receipt_url;
+
+  useEffect(() => {
+    if (selectedRequest?.billing_type) {
+      setBillingType(selectedRequest.billing_type);
+      setDuration(selectedRequest.duration || (selectedRequest.billing_type === "monthly_retainer" ? "Monthly Ongoing" : "4-Week Fixed Sprint"));
+    }
+  }, [selectedRequest]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -72,7 +98,8 @@ export function ClientPaymentPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Intercept submit: open Contract Terms agreement popup before final submission
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRequestId) {
       toast.error("Please select a service to pay for.");
@@ -91,14 +118,24 @@ export function ClientPaymentPage() {
       return;
     }
 
+    setShowContractModal(true);
+  };
+
+  // Final confirmation inside contract modal
+  const handleConfirmContractAndSubmit = async () => {
     try {
       await submitReceipt({
         requestId: selectedRequestId,
-        file: selectedFile,
+        file: selectedFile!,
         notes: paymentNotes,
+        contractAccepted: true,
+        contractAcceptedAt: new Date().toISOString(),
+        billingType,
+        duration: duration || (billingType === "monthly_retainer" ? "Monthly Retainer" : "One-Time Delivery"),
       });
 
-      toast.success("Payment receipt attached successfully!");
+      setShowContractModal(false);
+      toast.success("Payment receipt and contract agreement submitted!");
       setIsSuccess(true);
     } catch (err: any) {
       toast.error(err.message || "Failed to submit receipt.");
@@ -174,6 +211,51 @@ export function ClientPaymentPage() {
           </h1>
         </div>
       </div>
+
+      {/* Active Monthly Retainers Status Strip */}
+      {activeRetainerServices.length > 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-secondary/30 border border-border shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-primary" />
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">
+                Ongoing Monthly Retainer Cadence
+              </h3>
+            </div>
+            <span className="text-[10px] font-mono text-muted-foreground font-semibold">
+              {activeRetainerServices.length} Monitored Retainer(s)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {activeRetainerServices.map((ret) => {
+              const isDue = ret.next_billing_date && new Date(ret.next_billing_date) <= new Date();
+              return (
+                <div
+                  key={ret.id}
+                  className="p-3.5 rounded-xl bg-card border border-border/80 flex items-center justify-between text-xs gap-3 shadow-2xs"
+                >
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="font-semibold text-foreground truncate">{ret.name}</p>
+                    <p className="text-[11px] text-muted-foreground font-mono">
+                      Cycle Due: {ret.next_billing_date ? formatDate(ret.next_billing_date) : "30-Day Cadence"}
+                    </p>
+                  </div>
+                  {isDue ? (
+                    <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
+                      Renewal Due
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                      Active Cycle
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* STEP 1: SELECT SERVICE */}
@@ -420,10 +502,10 @@ export function ClientPaymentPage() {
                   <button
                     type="submit"
                     disabled={!selectedFile || isSubmittingReceipt}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
                   >
-                    <Receipt className="w-3.5 h-3.5" />
-                    {isSubmittingReceipt ? "Submitting..." : "Submit Payment Confirmation"}
+                    <FileSignature className="w-4 h-4" />
+                    <span>Review Terms & Sign Contract →</span>
                   </button>
                 </div>
               </>
@@ -431,6 +513,23 @@ export function ClientPaymentPage() {
           </div>
         )}
       </form>
+
+      {/* Contract Terms Agreement Popup Modal */}
+      <ContractAgreementModal
+        isOpen={showContractModal}
+        onClose={() => setShowContractModal(false)}
+        serviceTitle={selectedRequest?.title || "Service Engagement"}
+        clientName={currentClient?.name}
+        amount={Number(selectedRequest?.estimated_total || 0)}
+        currency={currency}
+        fileName={selectedFile?.name}
+        billingType={billingType}
+        onBillingTypeChange={setBillingType}
+        duration={duration}
+        onDurationChange={setDuration}
+        onConfirm={handleConfirmContractAndSubmit}
+        isSubmitting={isSubmittingReceipt}
+      />
     </motion.div>
   );
 }

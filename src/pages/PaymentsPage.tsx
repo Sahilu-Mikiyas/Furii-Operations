@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useProjects } from "@/hooks/useProjects";
 import { useClients } from "@/hooks/useClients";
+import { useServices } from "@/hooks/useServices";
+import { useServiceRequests } from "@/hooks/useServiceRequests";
 import { useFinancialSummary } from "@/hooks/useFinancialSummary";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -16,12 +18,15 @@ import {
   X,
   Receipt,
   ShieldCheck,
+  Calendar,
+  Layers,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import type { PaymentMethod, Invoice, Payment } from "@/types";
 import { ReceiptInvoiceModal } from "@/components/shared/ReceiptInvoiceModal";
 import type { ReceiptPdfData } from "@/lib/invoicePdfGenerator";
+import { ClassifiedServicesBillingView } from "@/components/finance/ClassifiedServicesBillingView";
 
 export function PaymentsPage() {
   const { currency, setCurrency, role, currentClient } = useAuth();
@@ -41,6 +46,10 @@ export function PaymentsPage() {
 
   const { projects } = useProjects(targetClientId);
   const { clients } = useClients();
+  const { services } = useServices(undefined, targetClientId);
+  const { requests } = useServiceRequests(targetClientId);
+
+  const [billingViewTab, setBillingViewTab] = useState<"invoices" | "monthly_retainers" | "one_time">("invoices");
 
   // Modals state
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
@@ -254,6 +263,168 @@ export function PaymentsPage() {
     }
   };
 
+  // 1. Monthly Retainer Services & Requests (Organized by Client & Month)
+  const retainerServicesList = useMemo(() => {
+    const list: Array<{
+      id: string;
+      clientId: string;
+      clientName: string;
+      name: string;
+      month: string;
+      amount: number;
+      currency: string;
+      nextBillingDate?: string | null;
+      isDue: boolean;
+      status: string;
+      receiptUrl?: string | null;
+      contractAccepted?: boolean;
+    }> = [];
+
+    // From services:
+    services.forEach((s) => {
+      if (s.billing_type === "monthly_retainer" || s.service_type === "social_media" || s.service_type === "maintenance") {
+        const client = clients.find((c) => c.id === s.client_id);
+        const proj = projects.find((p) => p.id === s.project_id);
+        const nextDate = s.next_billing_date;
+        const isDue = nextDate ? new Date(nextDate) <= new Date() : false;
+        const currentMonth = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
+
+        list.push({
+          id: s.id,
+          clientId: s.client_id,
+          clientName: client?.name || "Client Partner",
+          name: s.name,
+          month: currentMonth,
+          amount: Number(proj?.budget || 0),
+          currency: proj?.budget_currency || currency,
+          nextBillingDate: nextDate,
+          isDue,
+          status: isDue ? "Renewal Receipt Due" : "Active 30-Day Cycle",
+          contractAccepted: true,
+        });
+      }
+    });
+
+    // From service_requests with monthly_retainer:
+    requests.forEach((r) => {
+      if (r.billing_type === "monthly_retainer") {
+        const client = clients.find((c) => c.id === r.client_id);
+        const month = r.billing_cycle_month || new Date(r.created_at).toLocaleString("en-US", { month: "long", year: "numeric" });
+        list.push({
+          id: r.id,
+          clientId: r.client_id,
+          clientName: client?.name || "Client Partner",
+          name: r.title,
+          month,
+          amount: Number(r.estimated_total || 0),
+          currency: r.currency || currency,
+          isDue: false,
+          status: r.status === "approved" ? "Cleared & Verified" : r.status === "payment_review" ? "Receipt Under Review" : "Pending Receipt",
+          receiptUrl: r.receipt_url,
+          contractAccepted: !!r.contract_accepted,
+        });
+      }
+    });
+
+    return list;
+  }, [services, requests, clients, projects, currency]);
+
+  const retainersByClientAndMonth = useMemo(() => {
+    const groups: Record<string, { clientName: string; months: Record<string, typeof retainerServicesList> }> = {};
+
+    retainerServicesList.forEach((item) => {
+      if (!groups[item.clientId]) {
+        groups[item.clientId] = { clientName: item.clientName, months: {} };
+      }
+      if (!groups[item.clientId].months[item.month]) {
+        groups[item.clientId].months[item.month] = [];
+      }
+      groups[item.clientId].months[item.month].push(item);
+    });
+
+    return groups;
+  }, [retainerServicesList]);
+
+  // 2. One-Time Services List (Organized by Client, Duration & Name)
+  const oneTimeServicesList = useMemo(() => {
+    const list: Array<{
+      id: string;
+      clientId: string;
+      clientName: string;
+      name: string;
+      duration: string;
+      amount: number;
+      currency: string;
+      status: string;
+      startDate?: string | null;
+      targetDate?: string | null;
+      receiptUrl?: string | null;
+      contractAccepted?: boolean;
+    }> = [];
+
+    services.forEach((s) => {
+      if (s.billing_type !== "monthly_retainer" && s.service_type !== "social_media" && s.service_type !== "maintenance") {
+        const client = clients.find((c) => c.id === s.client_id);
+        const proj = projects.find((p) => p.id === s.project_id);
+        list.push({
+          id: s.id,
+          clientId: s.client_id,
+          clientName: client?.name || "Client Partner",
+          name: s.name,
+          duration: s.duration || "4-Week Delivery Sprint",
+          amount: Number(proj?.budget || 0),
+          currency: proj?.budget_currency || currency,
+          status: s.status.replace("_", " "),
+          startDate: s.start_date,
+          targetDate: s.target_date,
+          contractAccepted: true,
+        });
+      }
+    });
+
+    requests.forEach((r) => {
+      if (r.billing_type !== "monthly_retainer") {
+        const client = clients.find((c) => c.id === r.client_id);
+        list.push({
+          id: r.id,
+          clientId: r.client_id,
+          clientName: client?.name || "Client Partner",
+          name: r.title,
+          duration: r.duration || "Fixed Milestone Scope",
+          amount: Number(r.estimated_total || 0),
+          currency: r.currency || currency,
+          status: r.status.replace("_", " "),
+          receiptUrl: r.receipt_url,
+          contractAccepted: !!r.contract_accepted,
+        });
+      }
+    });
+
+    return list;
+  }, [services, requests, clients, projects, currency]);
+
+  const oneTimeByClient = useMemo(() => {
+    const groups: Record<string, { clientName: string; services: typeof oneTimeServicesList }> = {};
+
+    oneTimeServicesList.forEach((item) => {
+      if (!groups[item.clientId]) {
+        groups[item.clientId] = { clientName: item.clientName, services: [] };
+      }
+      groups[item.clientId].services.push(item);
+    });
+
+    // Sort each client's services by duration, then name
+    Object.values(groups).forEach((grp) => {
+      grp.services.sort((a, b) => {
+        const durCompare = a.duration.localeCompare(b.duration);
+        if (durCompare !== 0) return durCompare;
+        return a.name.localeCompare(b.name);
+      });
+    });
+
+    return groups;
+  }, [oneTimeServicesList]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -312,140 +483,204 @@ export function PaymentsPage() {
         </div>
       </div>
 
-      {/* Invoices List */}
-      <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <h2 className="text-base font-bold text-foreground">Invoices & Statements</h2>
-            <p className="text-xs text-muted-foreground">Formal billing statements issued against project scopes.</p>
-          </div>
-          {isManager && (
-            <button
-              onClick={() => setShowCreateInvoiceModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground transition-colors border border-border cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              New Invoice
-            </button>
-          )}
+      {/* Financial Classification Tab Navigation */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 pb-3">
+        <div className="flex items-center gap-1.5 p-1 bg-secondary/50 rounded-xl border border-border/60">
+          <button
+            type="button"
+            onClick={() => setBillingViewTab("invoices")}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              billingViewTab === "invoices"
+                ? "bg-card text-foreground shadow-2xs border border-border/80"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Receipt className="w-3.5 h-3.5" />
+            <span>Master Invoices & Statements</span>
+            <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full bg-secondary font-mono">
+              {invoices.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBillingViewTab("monthly_retainers")}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              billingViewTab === "monthly_retainers"
+                ? "bg-card text-foreground shadow-2xs border border-border/80"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+            <span>Monthly Retainers (By Client & Month)</span>
+            <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 font-mono font-bold">
+              {retainerServicesList.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBillingViewTab("one_time")}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              billingViewTab === "one_time"
+                ? "bg-card text-foreground shadow-2xs border border-border/80"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <span>One-Time Offers (By Client & Duration)</span>
+            <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono font-bold">
+              {oneTimeServicesList.length}
+            </span>
+          </button>
         </div>
-
-        {isLoading ? (
-          <div className="p-8 flex justify-center text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin" />
-          </div>
-        ) : invoices.length === 0 ? (
-          <div className="p-10 text-center bg-secondary/20 rounded-xl border border-dashed border-border text-xs text-muted-foreground">
-            No invoices issued yet.
-          </div>
-        ) : (
-          <div className="divide-y divide-border/60">
-            {invoices.map((inv) => {
-              const amount = Number(inv.total || inv.amount || 0);
-              const isPaid = inv.status === "paid";
-
-              return (
-                <div key={inv.id} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-bold text-foreground">{inv.invoice_number}</span>
-                      <StatusBadge status={inv.status} />
-                    </div>
-                    <p className="text-xs font-medium text-foreground">{inv.title}</p>
-                    <p className="text-[11px] text-muted-foreground font-mono">
-                      Due: {formatDate(inv.due_date)}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-sm font-bold font-mono text-foreground">
-                        {formatCurrency(amount, currency)}
-                      </p>
-                      {inv.amount_paid > 0 && !isPaid && (
-                        <span className="text-[10px] text-emerald-600 font-mono">
-                          Paid: {formatCurrency(inv.amount_paid, currency)}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleOpenInvoicePdf(inv)}
-                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer flex items-center gap-1"
-                        title="View and download PDF invoice / receipt"
-                      >
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>PDF</span>
-                      </button>
-
-                      {!isPaid && isManager && (
-                        <button
-                          onClick={() => {
-                            setRecordModalInvoiceId(inv.id);
-                            setPayAmount(String(amount - Number(inv.amount_paid || 0)));
-                          }}
-                          className="px-3 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
-                        >
-                          Record Payment
-                        </button>
-                      )}
-
-                      {isManager && (
-                        <button
-                          onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors border border-border cursor-pointer"
-                          title="Delete invoice"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
-      {/* Verified Payments Ledger */}
-      {payments.length > 0 && (
-        <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
-          <div className="flex items-center gap-2">
-            <Receipt className="w-4 h-4 text-emerald-600" />
-            <h2 className="text-base font-bold text-foreground">Payment Records Ledger</h2>
-          </div>
-          <div className="divide-y divide-border/60">
-            {payments.map((pay) => (
-              <div key={pay.id} className="py-3 flex items-center justify-between text-xs">
-                <div>
-                  <p className="font-semibold text-foreground">
-                    {pay.reference || "Bank Wire Transfer"}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground font-mono">
-                    {formatDate(pay.payment_date)} • Method: {pay.method.replace("_", " ")}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 text-right">
-                  <div>
-                    <span className="font-mono font-bold text-emerald-600 block">
-                      +{formatCurrency(pay.amount, currency)}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleOpenPaymentPdf(pay)}
-                    className="p-1.5 rounded-lg border border-border bg-secondary/50 hover:bg-secondary text-foreground text-xs transition-colors flex items-center gap-1 cursor-pointer"
-                    title="Download official receipt PDF"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Receipt</span>
-                  </button>
-                </div>
+      {billingViewTab === "invoices" ? (
+        <>
+          {/* Invoices List */}
+          <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <h2 className="text-base font-bold text-foreground">Invoices & Statements</h2>
+                <p className="text-xs text-muted-foreground">Formal billing statements issued against project scopes.</p>
               </div>
-            ))}
+              {isManager && (
+                <button
+                  onClick={() => setShowCreateInvoiceModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground transition-colors border border-border cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New Invoice
+                </button>
+              )}
+            </div>
+
+            {isLoading ? (
+              <div className="p-8 flex justify-center text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="p-10 text-center bg-secondary/20 rounded-xl border border-dashed border-border text-xs text-muted-foreground">
+                No invoices issued yet.
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {invoices.map((inv) => {
+                  const amount = Number(inv.total || inv.amount || 0);
+                  const isPaid = inv.status === "paid";
+
+                  return (
+                    <div key={inv.id} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-foreground">{inv.invoice_number}</span>
+                          <StatusBadge status={inv.status} />
+                        </div>
+                        <p className="text-xs font-medium text-foreground">{inv.title}</p>
+                        <p className="text-[11px] text-muted-foreground font-mono">
+                          Due: {formatDate(inv.due_date)}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="text-sm font-bold font-mono text-foreground">
+                            {formatCurrency(amount, currency)}
+                          </p>
+                          {inv.amount_paid > 0 && !isPaid && (
+                            <span className="text-[10px] text-emerald-600 font-mono">
+                              Paid: {formatCurrency(inv.amount_paid, currency)}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleOpenInvoicePdf(inv)}
+                            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer flex items-center gap-1"
+                            title="View and download PDF invoice / receipt"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>PDF</span>
+                          </button>
+
+                          {!isPaid && isManager && (
+                            <button
+                              onClick={() => {
+                                setRecordModalInvoiceId(inv.id);
+                                setPayAmount(String(amount - Number(inv.amount_paid || 0)));
+                              }}
+                              className="px-3 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
+                            >
+                              Record Payment
+                            </button>
+                          )}
+
+                          {isManager && (
+                            <button
+                              onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors border border-border cursor-pointer"
+                              title="Delete invoice"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
+
+          {/* Verified Payments Ledger */}
+          {payments.length > 0 && (
+            <div className="p-6 rounded-2xl bg-card border border-border shadow-2xs space-y-4">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-emerald-600" />
+                <h2 className="text-base font-bold text-foreground">Payment Records Ledger</h2>
+              </div>
+              <div className="divide-y divide-border/60">
+                {payments.map((pay) => (
+                  <div key={pay.id} className="py-3 flex items-center justify-between text-xs">
+                    <div>
+                      <p className="font-semibold text-foreground">
+                        {pay.reference || "Bank Wire Transfer"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground font-mono">
+                        {formatDate(pay.payment_date)} • Method: {pay.method.replace("_", " ")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 text-right">
+                      <div>
+                        <span className="font-mono font-bold text-emerald-600 block">
+                          +{formatCurrency(pay.amount, currency)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleOpenPaymentPdf(pay)}
+                        className="p-1.5 rounded-lg border border-border bg-secondary/50 hover:bg-secondary text-foreground text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Download official receipt PDF"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Receipt</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <ClassifiedServicesBillingView
+          viewMode={billingViewTab}
+          retainersByClientAndMonth={retainersByClientAndMonth}
+          oneTimeByClient={oneTimeByClient}
+          currency={currency}
+        />
       )}
 
       {/* Issue Invoice Modal */}
