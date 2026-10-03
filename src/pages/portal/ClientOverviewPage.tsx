@@ -3,6 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { useApprovals } from "@/hooks/useApprovals";
 import { useProjects } from "@/hooks/useProjects";
 import { useServices } from "@/hooks/useServices";
+import { useTasks } from "@/hooks/useTasks";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -28,6 +29,7 @@ export function ClientOverviewPage() {
   const { approvals } = useApprovals(clientId);
   const { projects } = useProjects(clientId);
   const { services } = useServices(undefined, clientId);
+  const { tasks } = useTasks();
   const { invoices } = useInvoices(clientId);
   const { events } = useCalendarEvents(clientId);
 
@@ -124,7 +126,16 @@ export function ClientOverviewPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {services.map((srv) => (
+          {services.map((srv) => {
+            const serviceTasks = tasks.filter(
+              (task) => task.service_id === srv.id || task.project_id === srv.project_id
+            );
+            const completedTasksCount = serviceTasks.filter((task) => task.status === "completed").length;
+            const progress = serviceTasks.length > 0
+              ? Math.round((completedTasksCount / serviceTasks.length) * 100)
+              : srv.progress || 0;
+
+            return (
             <Link
               key={srv.id}
               to="/portal/services"
@@ -147,11 +158,11 @@ export function ClientOverviewPage() {
 
               <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-3 min-w-0">
                 <CircularProgress
-                  value={srv.progress}
+                  value={progress}
                   size={38}
                   strokeWidth={3.5}
                   label="Phase Progress"
-                  sublabel={srv.current_phase || (srv.progress === 100 ? "Completed" : "Active")}
+                  sublabel={srv.current_phase || (progress === 100 ? "Completed" : "Active")}
                   className="min-w-0 flex-1"
                 />
                 <span className="text-xs font-semibold text-primary group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 shrink-0">
@@ -159,7 +170,8 @@ export function ClientOverviewPage() {
                 </span>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       </div>
 
