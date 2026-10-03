@@ -26,7 +26,7 @@ export function useServices(projectId?: string, clientId?: string) {
         let billing_type = row.billing_type || "one_time";
         let next_billing_date = row.next_billing_date || null;
         let billing_start_date = row.billing_start_date || null;
-        let billing_cycle_day = row.billing_cycle_day ?? null;
+        let billing_cycle_day: number | null = null;
         let duration = row.duration || null;
         let cleanSummary = row.summary || "";
 
@@ -38,7 +38,7 @@ export function useServices(projectId?: string, clientId?: string) {
               if (!row.billing_type && meta.type) billing_type = meta.type;
               if (!row.next_billing_date && meta.next_billing_date) next_billing_date = meta.next_billing_date;
               if (!row.billing_start_date && meta.billing_start_date) billing_start_date = meta.billing_start_date;
-              if (row.billing_cycle_day == null && meta.billing_cycle_day != null) billing_cycle_day = meta.billing_cycle_day;
+              if (meta.billing_cycle_day != null) billing_cycle_day = meta.billing_cycle_day;
               if (!row.duration && meta.duration) duration = meta.duration;
               cleanSummary = cleanSummary.replace(/\[BILLING:.*?\]/, "").trim();
             }
@@ -70,12 +70,6 @@ export function useServices(projectId?: string, clientId?: string) {
       | "current_phase"
       | "start_date"
       | "target_date"
-      | "billing_type"
-      | "billing_cycle_day"
-      | "billing_start_date"
-      | "next_billing_date"
-      | "duration"
-      | "summary"
     >>) => {
       const updateData: Record<string, any> = { ...updates, updated_at: new Date().toISOString() };
 
