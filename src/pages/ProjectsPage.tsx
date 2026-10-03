@@ -544,9 +544,6 @@ export function ProjectsPage() {
         start_date: editSrvStartDate || null,
         target_date: editSrvTargetDate || null,
         billing_type: editSrvBillingType,
-        billing_cycle_day: editSrvBillingType === "monthly_retainer" && editSrvBillingCycleDay
-          ? Number(editSrvBillingCycleDay)
-          : null,
         billing_start_date: editSrvBillingType === "monthly_retainer" ? editSrvBillingStartDate || null : null,
         next_billing_date: editSrvBillingType === "monthly_retainer" ? editSrvNextBillingDate || null : null,
         duration: editSrvDuration.trim() || null,
