@@ -48,6 +48,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { ContractWorkspaceView } from "@/components/contracts/ContractWorkspaceView";
 import type {
+  BillingType,
   ServiceType,
   ServiceStatus,
   ProjectStatus,
@@ -159,7 +160,7 @@ export function ProjectsPage() {
     isLoading: servicesLoading,
     createService,
     deleteService,
-    updateProgress,
+    updateService,
     isCreatingService,
   } = useServices(selectedProject?.id);
 
@@ -304,9 +305,18 @@ export function ProjectsPage() {
   // Edit Service Form
   const [editSrvName, setEditSrvName] = useState("");
   const [editSrvDesc, setEditSrvDesc] = useState("");
+  const [editSrvType, setEditSrvType] = useState<ServiceType>("website");
   const [editSrvPhase, setEditSrvPhase] = useState("");
   const [editSrvStatus, setEditSrvStatus] = useState<ServiceStatus>("in_progress");
   const [editSrvProgress, setEditSrvProgress] = useState(0);
+  const [editSrvStartDate, setEditSrvStartDate] = useState("");
+  const [editSrvTargetDate, setEditSrvTargetDate] = useState("");
+  const [editSrvBillingType, setEditSrvBillingType] = useState<BillingType>("one_time");
+  const [editSrvBillingCycleDay, setEditSrvBillingCycleDay] = useState("");
+  const [editSrvBillingStartDate, setEditSrvBillingStartDate] = useState("");
+  const [editSrvNextBillingDate, setEditSrvNextBillingDate] = useState("");
+  const [editSrvDuration, setEditSrvDuration] = useState("");
+  const [editSrvSummary, setEditSrvSummary] = useState("");
 
   // New Milestone Form
   const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
@@ -395,9 +405,18 @@ export function ProjectsPage() {
     if (!selectedService) return;
     setEditSrvName(selectedService.name);
     setEditSrvDesc(selectedService.description || "");
+    setEditSrvType(selectedService.service_type);
     setEditSrvPhase(selectedService.current_phase || "");
     setEditSrvStatus(selectedService.status || "in_progress");
     setEditSrvProgress(selectedService.progress || 0);
+    setEditSrvStartDate(selectedService.start_date || "");
+    setEditSrvTargetDate(selectedService.target_date || "");
+    setEditSrvBillingType(selectedService.billing_type || "one_time");
+    setEditSrvBillingCycleDay(selectedService.billing_cycle_day?.toString() || "");
+    setEditSrvBillingStartDate(selectedService.billing_start_date || "");
+    setEditSrvNextBillingDate(selectedService.next_billing_date || "");
+    setEditSrvDuration(selectedService.duration || "");
+    setEditSrvSummary(selectedService.summary || "");
     setShowEditServiceModal(true);
   };
 
@@ -504,11 +523,34 @@ export function ProjectsPage() {
     e.preventDefault();
     if (!selectedService) return;
     try {
-      await updateProgress({
+      const billingMetadata = {
+        type: editSrvBillingType,
+        billing_cycle_day: editSrvBillingType === "monthly_retainer" && editSrvBillingCycleDay ? Number(editSrvBillingCycleDay) : null,
+        billing_start_date: editSrvBillingType === "monthly_retainer" ? editSrvBillingStartDate || null : null,
+        next_billing_date: editSrvBillingType === "monthly_retainer" ? editSrvNextBillingDate || null : null,
+        duration: editSrvDuration || null,
+      };
+      const summary = [editSrvSummary.trim(), `[BILLING:${JSON.stringify(billingMetadata)}]`]
+        .filter(Boolean)
+        .join("\n\n");
+      await updateService({
         id: selectedService.id,
+        service_type: editSrvType,
+        name: editSrvName.trim(),
+        description: editSrvDesc.trim() || null,
         progress: Number(editSrvProgress),
         status: editSrvStatus,
-        current_phase: editSrvPhase,
+        current_phase: editSrvPhase.trim() || null,
+        start_date: editSrvStartDate || null,
+        target_date: editSrvTargetDate || null,
+        billing_type: editSrvBillingType,
+        billing_cycle_day: editSrvBillingType === "monthly_retainer" && editSrvBillingCycleDay
+          ? Number(editSrvBillingCycleDay)
+          : null,
+        billing_start_date: editSrvBillingType === "monthly_retainer" ? editSrvBillingStartDate || null : null,
+        next_billing_date: editSrvBillingType === "monthly_retainer" ? editSrvNextBillingDate || null : null,
+        duration: editSrvDuration.trim() || null,
+        summary,
       });
       toast.success("Service workspace updated.");
       setShowEditServiceModal(false);
@@ -2814,7 +2856,7 @@ export function ProjectsPage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+            className="bg-card w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border shadow-2xl p-6 space-y-4"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-foreground">Update Service Workspace</h2>
@@ -2823,6 +2865,22 @@ export function ProjectsPage() {
               </button>
             </div>
             <form onSubmit={handleUpdateService} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Service type</label>
+                  <select value={editSrvType} onChange={(e) => setEditSrvType(e.target.value as ServiceType)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden">
+                    {SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Workspace name</label>
+                  <input required value={editSrvName} onChange={(e) => setEditSrvName(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Description / scope</label>
+                <textarea rows={2} value={editSrvDesc} onChange={(e) => setEditSrvDesc(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden resize-y" />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-foreground mb-1">Status</label>
@@ -2861,6 +2919,52 @@ export function ProjectsPage() {
                   placeholder="e.g. Design & Client Feedback"
                   className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Start date</label>
+                  <input type="date" value={editSrvStartDate} onChange={(e) => setEditSrvStartDate(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Target date</label>
+                  <input type="date" value={editSrvTargetDate} onChange={(e) => setEditSrvTargetDate(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden" />
+                </div>
+              </div>
+              <div className="border-t border-border pt-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1">Billing type</label>
+                    <select value={editSrvBillingType} onChange={(e) => setEditSrvBillingType(e.target.value as BillingType)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden">
+                      <option value="one_time">One-time</option>
+                      <option value="monthly_retainer">Monthly retainer</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1">Duration</label>
+                    <input value={editSrvDuration} onChange={(e) => setEditSrvDuration(e.target.value)} placeholder="e.g. 3 months, ongoing" className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden" />
+                  </div>
+                </div>
+                {editSrvBillingType === "monthly_retainer" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-foreground mb-1">Billing cycle day (1–31)</label>
+                      <input type="number" min={1} max={31} value={editSrvBillingCycleDay} onChange={(e) => setEditSrvBillingCycleDay(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-foreground mb-1">Billing start date</label>
+                      <input type="date" value={editSrvBillingStartDate} onChange={(e) => setEditSrvBillingStartDate(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-foreground mb-1">Next billing date</label>
+                      <input type="date" value={editSrvNextBillingDate} onChange={(e) => setEditSrvNextBillingDate(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden" />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Internal summary</label>
+                <textarea rows={2} value={editSrvSummary} onChange={(e) => setEditSrvSummary(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden resize-y" />
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-2">
