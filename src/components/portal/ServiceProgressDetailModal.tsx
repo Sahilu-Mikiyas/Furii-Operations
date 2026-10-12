@@ -49,7 +49,6 @@ import { useInvoices } from "@/hooks/useInvoices";
 import { useFinancialSummary } from "@/hooks/useFinancialSummary";
 import { CURATED_PACKAGES } from "@/data/catalog";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { useChecklists } from "@/hooks/useChecklists";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { ReceiptInvoiceModal } from "@/components/shared/ReceiptInvoiceModal";
@@ -127,7 +126,6 @@ export function ServiceProgressDetailModal({
   const { workRecords } = useWorkRecords(service?.id, service?.project_id);
   const { invoices } = useInvoices(service?.client_id);
   const { getServiceFinancials } = useFinancialSummary(service?.client_id);
-  const { categories: checklistCategories, items: checklistItems } = useChecklists();
 
   // Manager quick add task / milestone states
   const [showAddTask, setShowAddTask] = useState(false);
@@ -301,34 +299,6 @@ export function ServiceProgressDetailModal({
   const approvedDeliverablesCount = serviceDeliverables.filter(
     (d) => d.status === "approved"
   ).length;
-
-  // Dynamic checklist fallback for tasks without explicit markdown checklists
-  const getStandardChecklist = (task: Task) => {
-    const isCompleted = task.status === "completed";
-    const isInReview = task.status === "in_review";
-    const isInProgress = task.status === "in_progress";
-
-    if (checklistItems && checklistItems.length > 0) {
-      return checklistItems.map((item, idx) => {
-        const cat = checklistCategories.find((c) => c.id === item.category_id);
-        const autoDone =
-          item.is_completed ||
-          isCompleted ||
-          (isInReview && idx <= Math.floor(checklistItems.length * 0.75)) ||
-          (isInProgress && idx <= Math.floor(checklistItems.length * 0.4));
-
-        return {
-          id: item.id,
-          step: item.title,
-          desc: item.description,
-          categoryName: cat?.name || "Quality Check",
-          done: autoDone,
-        };
-      });
-    }
-
-    return [];
-  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 animate-in fade-in duration-200">
@@ -756,20 +726,11 @@ export function ServiceProgressDetailModal({
                     const isDone = task.status === "completed";
                     const { cleanDescription, subtasks } = parseSubtasks(task.description || "");
 
-                    // Use parsed subtasks if present, else standard dynamic checklist
-                    const hasCustomSubtasks = subtasks.length > 0;
-                    const itemsToRender = hasCustomSubtasks
-                      ? subtasks.map((s) => ({
-                          id: s.id,
-                          title: s.title,
-                          done: s.done,
-                        }))
-                      : getStandardChecklist(task).map((s) => ({
-                          id: s.id,
-                          title: s.step,
-                          done: s.done,
-                          category: s.categoryName,
-                        }));
+                    const itemsToRender = subtasks.map((s) => ({
+                      id: s.id,
+                      title: s.title,
+                      done: s.done,
+                    }));
 
                     const completedItemsCount = itemsToRender.filter((s) => s.done).length;
                     const subtaskPct = itemsToRender.length > 0 ? Math.round((completedItemsCount / itemsToRender.length) * 100) : 0;
@@ -840,15 +801,16 @@ export function ServiceProgressDetailModal({
                           </div>
 
                           <div className="flex items-center gap-3 shrink-0 justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-border/50">
-                            {/* Checklist mini-progress */}
-                            <div className="text-right min-w-[70px]">
-                              <span className="text-[10px] font-mono text-muted-foreground block font-semibold">
-                                {completedItemsCount}/{itemsToRender.length} Done
-                              </span>
-                              <div className="w-20 sm:w-24 mt-1">
-                                <ProgressBar value={subtaskPct} showValue={false} className="h-1.5" />
+                            {itemsToRender.length > 0 && (
+                              <div className="text-right min-w-[70px]">
+                                <span className="text-[10px] font-mono text-muted-foreground block font-semibold">
+                                  {completedItemsCount}/{itemsToRender.length} Done
+                                </span>
+                                <div className="w-20 sm:w-24 mt-1">
+                                  <ProgressBar value={subtaskPct} showValue={false} className="h-1.5" />
+                                </div>
                               </div>
-                            </div>
+                            )}
 
                             <div className="p-1 rounded-lg border border-border bg-secondary/30 text-muted-foreground">
                               {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -871,52 +833,54 @@ export function ServiceProgressDetailModal({
                                 </div>
                               )}
 
-                              <div className="space-y-2">
-                                <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground font-bold flex items-center gap-1.5">
-                                  <CheckSquare className="w-3.5 h-3.5 text-primary" />
-                                  Checklist Breakdown ({completedItemsCount}/{itemsToRender.length})
-                                </div>
-
+                              {itemsToRender.length > 0 && (
                                 <div className="space-y-2">
-                                  {itemsToRender.map((step, idx) => (
-                                    <div
-                                      key={step.id || idx}
-                                      className={`p-3 rounded-xl border transition-all flex items-start justify-between gap-3 text-xs ${
-                                        step.done
-                                          ? "bg-emerald-500/5 border-emerald-500/20 text-foreground"
-                                          : "bg-card border-border/70 text-foreground"
-                                      }`}
-                                    >
-                                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                                        {step.done ? (
-                                          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                                        ) : (
-                                          <Circle className="w-4 h-4 text-primary/50 shrink-0 mt-0.5" />
-                                        )}
-                                        <div className="space-y-0.5 min-w-0">
-                                          <span
-                                            className={`font-semibold leading-relaxed break-words block ${
-                                              step.done ? "line-through text-muted-foreground" : "text-foreground"
-                                            }`}
-                                          >
-                                            {step.title}
-                                          </span>
-                                        </div>
-                                      </div>
+                                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground font-bold flex items-center gap-1.5">
+                                    <CheckSquare className="w-3.5 h-3.5 text-primary" />
+                                    Checklist Breakdown ({completedItemsCount}/{itemsToRender.length})
+                                  </div>
 
-                                      <span
-                                        className={`text-[9px] font-mono uppercase font-bold px-2 py-0.5 rounded shrink-0 ${
+                                  <div className="space-y-2">
+                                    {itemsToRender.map((step, idx) => (
+                                      <div
+                                        key={step.id || idx}
+                                        className={`p-3 rounded-xl border transition-all flex items-start justify-between gap-3 text-xs ${
                                           step.done
-                                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                                            : "bg-secondary text-muted-foreground border border-border"
+                                            ? "bg-emerald-500/5 border-emerald-500/20 text-foreground"
+                                            : "bg-card border-border/70 text-foreground"
                                         }`}
                                       >
-                                        {step.done ? "Completed" : "Pending"}
-                                      </span>
-                                    </div>
-                                  ))}
+                                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                          {step.done ? (
+                                            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                                          ) : (
+                                            <Circle className="w-4 h-4 text-primary/50 shrink-0 mt-0.5" />
+                                          )}
+                                          <div className="space-y-0.5 min-w-0">
+                                            <span
+                                              className={`font-semibold leading-relaxed break-words block ${
+                                                step.done ? "line-through text-muted-foreground" : "text-foreground"
+                                              }`}
+                                            >
+                                              {step.title}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        <span
+                                          className={`text-[9px] font-mono uppercase font-bold px-2 py-0.5 rounded shrink-0 ${
+                                            step.done
+                                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                              : "bg-secondary text-muted-foreground border border-border"
+                                          }`}
+                                        >
+                                          {step.done ? "Completed" : "Pending"}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
+                              )}
                             </motion.div>
                           )}
                         </AnimatePresence>

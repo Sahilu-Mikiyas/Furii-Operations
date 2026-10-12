@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Service, ServiceStatus } from "@/types";
+import type { Service } from "@/types";
 
 export function useServices(projectId?: string, clientId?: string) {
   const queryClient = useQueryClient();
@@ -25,7 +25,8 @@ export function useServices(projectId?: string, clientId?: string) {
       return (data || []).map((row: any) => {
         let billing_type = row.billing_type || "one_time";
         let next_billing_date = row.next_billing_date || null;
-        let billing_start_date = row.billing_start_date || row.start_date || null;
+        let billing_start_date = row.billing_start_date || null;
+        let billing_cycle_day: number | null = null;
         let duration = row.duration || null;
         let cleanSummary = row.summary || "";
 
@@ -34,10 +35,11 @@ export function useServices(projectId?: string, clientId?: string) {
             const match = cleanSummary.match(/\[BILLING:(.*?)\]/);
             if (match && match[1]) {
               const meta = JSON.parse(match[1]);
-              if (meta.type) billing_type = meta.type;
-              if (meta.next_billing_date) next_billing_date = meta.next_billing_date;
-              if (meta.billing_start_date) billing_start_date = meta.billing_start_date;
-              if (meta.duration) duration = meta.duration;
+              if (!row.billing_type && meta.type) billing_type = meta.type;
+              if (!row.next_billing_date && meta.next_billing_date) next_billing_date = meta.next_billing_date;
+              if (!row.billing_start_date && meta.billing_start_date) billing_start_date = meta.billing_start_date;
+              if (meta.billing_cycle_day != null) billing_cycle_day = meta.billing_cycle_day;
+              if (!row.duration && meta.duration) duration = meta.duration;
               cleanSummary = cleanSummary.replace(/\[BILLING:.*?\]/, "").trim();
             }
           } catch (e) {
@@ -50,6 +52,7 @@ export function useServices(projectId?: string, clientId?: string) {
           billing_type,
           next_billing_date,
           billing_start_date,
+          billing_cycle_day,
           duration,
           summary: cleanSummary,
         };
@@ -57,11 +60,18 @@ export function useServices(projectId?: string, clientId?: string) {
     },
   });
 
-  const updateProgressMutation = useMutation({
-    mutationFn: async ({ id, progress, status, current_phase }: { id: string; progress: number; status?: ServiceStatus; current_phase?: string }) => {
-      const updateData: Record<string, any> = { progress, updated_at: new Date().toISOString() };
-      if (status) updateData.status = status;
-      if (current_phase) updateData.current_phase = current_phase;
+  const updateServiceMutation = useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string } & Partial<Pick<Service,
+      | "service_type"
+      | "name"
+      | "description"
+      | "status"
+      | "progress"
+      | "current_phase"
+      | "start_date"
+      | "target_date"
+    >>) => {
+      const updateData: Record<string, any> = { ...updates, updated_at: new Date().toISOString() };
 
       const { data, error } = await supabase
         .from("services")
@@ -149,7 +159,7 @@ export function useServices(projectId?: string, clientId?: string) {
   return {
     ...query,
     services: query.data || [],
-    updateProgress: updateProgressMutation.mutateAsync,
+    updateService: updateServiceMutation.mutateAsync,
     createService: createServiceMutation.mutateAsync,
     deleteService: deleteServiceMutation.mutateAsync,
     isCreatingService: createServiceMutation.isPending,

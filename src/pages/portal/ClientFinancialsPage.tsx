@@ -74,8 +74,11 @@ export function ClientFinancialsPage() {
     const rawReq = item.rawRequest;
     const rawInv = item.rawInvoice;
     const rawProj = item.rawProject;
+    const rawPay = item.rawPayment;
 
-    const receiptNum = rawReq
+    const receiptNum = rawPay
+      ? `FURII-PAY-${rawPay.id.slice(0, 8).toUpperCase()}`
+      : rawReq
       ? `FURII-REC-${rawReq.id.slice(0, 8).toUpperCase()}`
       : rawInv
       ? `FURII-${rawInv.invoice_number}`
@@ -99,7 +102,7 @@ export function ClientFinancialsPage() {
         unitPrice: Number(catItem.price || catItem.cost || item.amount / rawReq.catalog_items.length),
         total: Number(catItem.price || catItem.cost || item.amount / rawReq.catalog_items.length),
       }));
-    } else if (rawInv?.items && Array.isArray(rawInv.items) && rawInv.items.length > 0) {
+    } else if (!rawPay && rawInv?.items && Array.isArray(rawInv.items) && rawInv.items.length > 0) {
       receiptItems = rawInv.items.map((invItem: any) => ({
         description: invItem.description || "Invoice Item",
         category: "Deliverable",
@@ -121,18 +124,20 @@ export function ClientFinancialsPage() {
       },
       projectTitle: item.title,
       serviceType: item.type,
-      description: rawReq?.description || rawProj?.description || "Authorized engagement stream with Furii Operations.",
+      description: rawPay?.notes || rawReq?.description || rawProj?.description || "Authorized engagement stream with Furii Operations.",
       items: receiptItems,
       currency: "ETB",
       subtotal: item.amount,
       totalAmount: item.amount,
       amountPaid: item.amount,
-      paymentMethod: rawReq?.payment_notes?.toLowerCase().includes("telebirr")
+      paymentMethod: rawPay
+        ? rawPay.method.replace("_", " ").toUpperCase()
+        : rawReq?.payment_notes?.toLowerCase().includes("telebirr")
         ? "Telebirr Electronic Money"
         : rawReq?.payment_notes?.toLowerCase().includes("cbe")
         ? "CBE Birr / Commercial Bank of Ethiopia"
         : "Bank Wire Transfer",
-      paymentReference: rawReq?.payment_notes || `TX-${receiptNum}`,
+      paymentReference: rawPay?.reference || rawReq?.payment_notes || `TX-${receiptNum}`,
       paymentDate: formatDate(item.date),
       verifiedBy: "Furii Operations & Finance",
     };

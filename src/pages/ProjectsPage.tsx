@@ -159,7 +159,7 @@ export function ProjectsPage() {
     isLoading: servicesLoading,
     createService,
     deleteService,
-    updateProgress,
+    updateService,
     isCreatingService,
   } = useServices(selectedProject?.id);
 
@@ -304,9 +304,12 @@ export function ProjectsPage() {
   // Edit Service Form
   const [editSrvName, setEditSrvName] = useState("");
   const [editSrvDesc, setEditSrvDesc] = useState("");
+  const [editSrvType, setEditSrvType] = useState<ServiceType>("website");
   const [editSrvPhase, setEditSrvPhase] = useState("");
   const [editSrvStatus, setEditSrvStatus] = useState<ServiceStatus>("in_progress");
   const [editSrvProgress, setEditSrvProgress] = useState(0);
+  const [editSrvStartDate, setEditSrvStartDate] = useState("");
+  const [editSrvTargetDate, setEditSrvTargetDate] = useState("");
 
   // New Milestone Form
   const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
@@ -395,9 +398,12 @@ export function ProjectsPage() {
     if (!selectedService) return;
     setEditSrvName(selectedService.name);
     setEditSrvDesc(selectedService.description || "");
+    setEditSrvType(selectedService.service_type);
     setEditSrvPhase(selectedService.current_phase || "");
     setEditSrvStatus(selectedService.status || "in_progress");
     setEditSrvProgress(selectedService.progress || 0);
+    setEditSrvStartDate(selectedService.start_date || "");
+    setEditSrvTargetDate(selectedService.target_date || "");
     setShowEditServiceModal(true);
   };
 
@@ -504,11 +510,16 @@ export function ProjectsPage() {
     e.preventDefault();
     if (!selectedService) return;
     try {
-      await updateProgress({
+      await updateService({
         id: selectedService.id,
+        service_type: editSrvType,
+        name: editSrvName.trim(),
+        description: editSrvDesc.trim() || null,
         progress: Number(editSrvProgress),
         status: editSrvStatus,
-        current_phase: editSrvPhase,
+        current_phase: editSrvPhase.trim() || null,
+        start_date: editSrvStartDate || null,
+        target_date: editSrvTargetDate || null,
       });
       toast.success("Service workspace updated.");
       setShowEditServiceModal(false);
@@ -2814,7 +2825,7 @@ export function ProjectsPage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 space-y-4"
+            className="bg-card w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border shadow-2xl p-6 space-y-4"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-foreground">Update Service Workspace</h2>
@@ -2823,6 +2834,22 @@ export function ProjectsPage() {
               </button>
             </div>
             <form onSubmit={handleUpdateService} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Service type</label>
+                  <select value={editSrvType} onChange={(e) => setEditSrvType(e.target.value as ServiceType)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden">
+                    {SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Workspace name</label>
+                  <input required value={editSrvName} onChange={(e) => setEditSrvName(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">Description / scope</label>
+                <textarea rows={2} value={editSrvDesc} onChange={(e) => setEditSrvDesc(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden resize-y" />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-foreground mb-1">Status</label>
@@ -2863,6 +2890,16 @@ export function ProjectsPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Start date</label>
+                  <input type="date" value={editSrvStartDate} onChange={(e) => setEditSrvStartDate(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Target date</label>
+                  <input type="date" value={editSrvTargetDate} onChange={(e) => setEditSrvTargetDate(e.target.value)} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-hidden" />
+                </div>
+              </div>
               <div className="pt-3 flex items-center justify-end gap-2">
                 <button
                   type="button"
