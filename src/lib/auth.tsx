@@ -52,13 +52,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabase.from("memberships").select("*").eq("user_id", authUser.id).maybeSingle(),
       ]);
 
-      const rawRole = (member?.role as UserRole) || (authUser.user_metadata?.role as UserRole) || null;
+      const rawRole = (member?.role as UserRole) || null;
       
       // Normalize: all admin-type roles → "manager", all client-type → "client"
-      const normalizeRole = (r: UserRole | null): UserRole => {
+      // NOTE: No fallback to user_metadata — users can self-edit metadata.
+      // No membership row = null role = "account not set up" screen.
+      const normalizeRole = (r: UserRole | null): UserRole | null => {
         if (r === "super_admin" || r === "admin" || r === "manager" || r === "team_member" || r === "operations_manager") return "manager";
         if (r === "client_owner" || r === "client_member" || r === "client") return "client";
-        return "client"; // safe fallback for users without explicit role
+        return null; // no membership = no role = no access
       };
       const resolvedRole = normalizeRole(rawRole);
       const resolvedClientId = member?.client_id || prof?.client_id || null;
@@ -66,13 +68,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Determine if user is truly an internal agency staff member (has a membership with an admin/team role)
       const isInternalStaff = rawRole === "super_admin" || rawRole === "admin" || rawRole === "manager" || rawRole === "team_member" || rawRole === "operations_manager";
 
+      // No membership row at all → show "account not set up" screen
+      if (!member && !prof) {
+        setUser(null);
+        setRole(null);
+        setCurrentClient(null);
+        setIsLoading(false);
+        return;
+      }
+
       const userProfile: Profile = prof || {
         id: authUser.id,
-        organization_id: member?.organization_id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29",
+        organization_id: member?.organization_id || "",
         client_id: resolvedClientId,
         email: authUser.email || "",
-        full_name: (authUser.user_metadata?.full_name as string) || prof?.full_name || "Furii Operator",
-        title: (authUser.user_metadata?.title as string) || prof?.title || "Specialist",
+        full_name: (authUser.user_metadata?.full_name as string) || "Furii User",
+        title: (authUser.user_metadata?.title as string) || "",
         created_at: authUser.created_at,
         updated_at: new Date().toISOString(),
       };

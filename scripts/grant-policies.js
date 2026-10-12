@@ -1,7 +1,16 @@
 import pg from 'pg';
 
-const password = process.env.SUPABASE_DB_PASSWORD || process.env.DB_PASSWORD || 'GrXlwBrKKBtREwUK';
-const projectRef = process.env.SUPABASE_PROJECT_ID || 'ymzwcmhsvgjnpgazicqz';
+const password = process.env.SUPABASE_DB_PASSWORD || process.env.DB_PASSWORD;
+const projectRef = process.env.SUPABASE_PROJECT_ID;
+
+if (!password) {
+  console.error('ERROR: SUPABASE_DB_PASSWORD environment variable is required. Refusing to run without it.');
+  process.exit(1);
+}
+if (!projectRef) {
+  console.error('ERROR: SUPABASE_PROJECT_ID environment variable is required. Refusing to run without it.');
+  process.exit(1);
+}
 
 async function grantAnonRead() {
   const client = new pg.Client({
