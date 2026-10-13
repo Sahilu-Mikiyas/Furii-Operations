@@ -5,6 +5,11 @@ import type { UserRole, Profile, Client } from "@/types";
 export interface AuthContextType {
   user: Profile | null;
   role: UserRole | null;
+  membershipRole: UserRole | null;
+  organizationId: string | null;
+  isStaff: boolean;
+  isClient: boolean;
+  isClientOwner: boolean;
   currentClient: Client | null;
   setCurrentClient: (client: Client | null) => void;
   currency: "ETB" | "USD";
@@ -19,6 +24,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Profile | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [membershipRole, setMembershipRole] = useState<UserRole | null>(null);
   const [currentClient, setCurrentClient] = useState<Client | null>(null);
   const [availableClients, setAvailableClients] = useState<Client[]>([]);
   const [currency, setCurrencyState] = useState<"ETB" | "USD">(() => {
@@ -90,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(userProfile);
       setRole(resolvedRole);
+      setMembershipRole(rawRole);
 
       // Load client data based on actual role
       if (resolvedClientId) {
@@ -118,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.warn("Auth sync error:", err);
       setUser(null);
       setRole(null);
+      setMembershipRole(null);
     } finally {
       setIsLoading(false);
     }
@@ -132,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setUser(null);
         setRole(null);
+        setMembershipRole(null);
         setCurrentClient(null);
         setIsLoading(false);
       }
@@ -149,16 +158,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       setRole(null);
+      setMembershipRole(null);
       setCurrentClient(null);
       setIsLoading(false);
     }
   };
+
+  const isStaff = role === "manager" || role === "super_admin" || role === "admin" || role === "team_member" || membershipRole === "super_admin" || membershipRole === "admin" || membershipRole === "manager" || membershipRole === "team_member" || membershipRole === "operations_manager";
+  const isClient = role === "client" || role === "client_owner" || role === "client_member" || membershipRole === "client" || membershipRole === "client_owner" || membershipRole === "client_member";
+  const isClientOwner = membershipRole === "client_owner" || role === "client_owner";
+  const organizationId = user?.organization_id || null;
 
   return (
     <AuthContext.Provider
       value={{
         user,
         role,
+        membershipRole,
+        organizationId,
+        isStaff,
+        isClient,
+        isClientOwner,
         currentClient,
         setCurrentClient,
         currency,

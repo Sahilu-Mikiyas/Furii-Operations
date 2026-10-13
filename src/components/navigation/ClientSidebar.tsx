@@ -31,7 +31,7 @@ export function ClientSidebar({
   isCollapsed,
   onToggleCollapse,
 }: ClientSidebarProps) {
-  const { currentClient, role, user, signOut } = useAuth();
+  const { currentClient, role, user, signOut, isClientOwner } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
 
