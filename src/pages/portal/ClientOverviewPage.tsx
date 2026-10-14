@@ -11,6 +11,7 @@ import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { CircularProgress } from "@/components/shared/CircularProgress";
+import { SocialPlatformMark } from "@/components/social/SocialPlatformMark";
 import { useFinancialSummary } from "@/hooks/useFinancialSummary";
 import { ProductionCalendarView } from "@/components/calendar/ProductionCalendarView";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -294,7 +295,7 @@ export function ClientOverviewPage() {
                 <span className="text-muted-foreground/50">·</span>
                 {socialAccounts.map((account: any) => {
                   const info = SOCIAL_PLATFORMS.find((item) => item.id === account.platform);
-                  return <span key={account.id} className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold" style={{ borderColor: `${info?.color}35`, backgroundColor: `${info?.color}0D`, color: info?.color }}><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: info?.color }} />{info?.label}</span>;
+                  return <span key={account.id} className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold" style={{ borderColor: `${info?.color}35`, backgroundColor: `${info?.color}0D`, color: info?.color }}><SocialPlatformMark platform={account.platform} size="sm"/>{info?.label}</span>;
                 })}
                 {!socialAccounts.length && !socialAccountsLoading && <span className="text-xs text-muted-foreground">Profiles are being set up by the Furii team</span>}
               </div>
