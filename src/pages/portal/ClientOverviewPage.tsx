@@ -262,7 +262,7 @@ export function ClientOverviewPage() {
 
       {/* Social analytics spotlight */}
       {socialService && (
-        <section className="relative isolate overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: "easeOut" }} className="relative isolate overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-500 via-fuchsia-500 via-55% to-amber-500" />
           <div className="pointer-events-none absolute -right-20 -top-24 -z-10 h-72 w-72 rounded-full bg-fuchsia-200/30 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-24 -left-20 -z-10 h-64 w-64 rounded-full bg-teal-200/30 blur-3xl" />
@@ -270,9 +270,9 @@ export function ClientOverviewPage() {
             <div className="space-y-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500/15 via-fuchsia-500/15 to-amber-500/20 text-primary">
+                  <motion.div whileHover={{ scale: 1.08, rotate: 5 }} transition={{ type: "spring", stiffness: 350, damping: 18 }} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500/15 via-fuchsia-500/15 to-amber-500/20 text-primary">
                     <Share2 className="h-5 w-5" />
-                  </div>
+                  </motion.div>
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Social studio</p>
                     <h2 className="text-lg font-bold tracking-tight">Your social performance</h2>
@@ -299,23 +299,23 @@ export function ClientOverviewPage() {
                 {!socialAccounts.length && !socialAccountsLoading && <span className="text-xs text-muted-foreground">Profiles are being set up by the Furii team</span>}
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-border/80 bg-background/75 p-3.5">
+                <motion.div whileHover={{ y: -3, scale: 1.015 }} transition={{ duration: 0.2 }} className="rounded-xl border border-border/80 bg-background/75 p-3.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total followers</p>
-                  <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight">{socialAccountsLoading || socialSnapshotsLoading ? "···" : socialSummary.followersCounted ? formatSocialNumber(socialSummary.followers) : "—"}</p>
+                  <motion.p key={socialSummary.followers} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-1 text-2xl font-bold tabular-nums tracking-tight">{socialAccountsLoading || socialSnapshotsLoading ? "···" : socialSummary.followersCounted ? formatSocialNumber(socialSummary.followers) : "—"}</motion.p>
                   <p className="mt-0.5 text-[10px] text-muted-foreground">Combined across tracked profiles</p>
-                </div>
-                <div className="rounded-xl border border-border/80 bg-background/75 p-3.5">
+                </motion.div>
+                <motion.div whileHover={{ y: -3, scale: 1.015 }} transition={{ duration: 0.2 }} className="rounded-xl border border-border/80 bg-background/75 p-3.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Net follower change</p>
-                  <p className={`mt-1 flex items-center gap-1 text-2xl font-bold tabular-nums tracking-tight ${socialSummary.netCounted && socialSummary.netChange < 0 ? "text-rose-600" : "text-emerald-700"}`}>
+                  <motion.p key={socialSummary.netChange} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={`mt-1 flex items-center gap-1 text-2xl font-bold tabular-nums tracking-tight ${socialSummary.netCounted && socialSummary.netChange < 0 ? "text-rose-600" : "text-emerald-700"}`}>
                     {socialAccountsLoading || socialSnapshotsLoading ? "···" : socialSummary.netCounted ? <><TrendingUp className="h-4 w-4" />{socialSummary.netChange > 0 ? "+" : ""}{formatSocialNumber(socialSummary.netChange)}</> : "—"}
-                  </p>
+                  </motion.p>
                   <p className="mt-0.5 text-[10px] text-muted-foreground">Since previous recorded update</p>
-                </div>
-                <div className="col-span-2 rounded-xl border border-border/80 bg-background/75 p-3.5 sm:col-span-1">
+                </motion.div>
+                <motion.div whileHover={{ y: -3, scale: 1.015 }} transition={{ duration: 0.2 }} className="col-span-2 rounded-xl border border-border/80 bg-background/75 p-3.5 sm:col-span-1">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Profiles tracked</p>
-                  <p className="mt-1 flex items-center gap-2 text-2xl font-bold tabular-nums tracking-tight"><Users className="h-4 w-4 text-primary" />{socialAccountsLoading ? "···" : socialAccounts.length}</p>
+                  <motion.p key={socialAccounts.length} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-1 flex items-center gap-2 text-2xl font-bold tabular-nums tracking-tight"><Users className="h-4 w-4 text-primary" />{socialAccountsLoading ? "···" : socialAccounts.length}</motion.p>
                   <p className="mt-0.5 text-[10px] text-muted-foreground">Managed by the Furii team</p>
-                </div>
+                </motion.div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-[11px] text-muted-foreground">{socialSummary.latestAt ? `Updated ${new Date(socialSummary.latestAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })} · recorded by Furii` : "Your analytics will appear after the first update."}</p>
@@ -337,7 +337,7 @@ export function ClientOverviewPage() {
                       <defs><linearGradient id="socialAudienceFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#b21f67" stopOpacity={0.25} /><stop offset="100%" stopColor="#0f8b88" stopOpacity={0.02} /></linearGradient></defs>
                       <XAxis dataKey="date" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={24} />
                       <Tooltip labelFormatter={(_, rows) => rows?.[0]?.payload?.fullDate || ""} formatter={(value: number) => [formatSocialNumber(value), "Followers"]} />
-                      <Area type="monotone" dataKey="followers" stroke="#a42a70" strokeWidth={2.5} fill="url(#socialAudienceFill)" connectNulls activeDot={{ r: 4 }} />
+                      <Area type="monotone" dataKey="followers" stroke="#a42a70" strokeWidth={2.5} fill="url(#socialAudienceFill)" connectNulls activeDot={{ r: 4 }} isAnimationActive animationDuration={1100} animationEasing="ease-in-out" />
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
@@ -352,7 +352,7 @@ export function ClientOverviewPage() {
               <div className="pointer-events-none absolute -bottom-16 -right-12 h-36 w-36 rounded-full border-[22px] border-fuchsia-300/10" aria-hidden="true" />
             </div>
           </div>
-        </section>
+        </motion.section>
       )}
 
       {/* Statement & Billing Summary (Client Owner) */}
