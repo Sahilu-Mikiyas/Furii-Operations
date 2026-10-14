@@ -35,6 +35,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import type { Service } from "@/types";
 import { ServiceProgressDetailModal } from "@/components/portal/ServiceProgressDetailModal";
+import { isActiveSocialService } from "@/lib/socialAnalytics";
 
 export function ClientServicesPage() {
   const navigate = useNavigate();
@@ -419,6 +420,19 @@ export function ClientServicesPage() {
 
                           {/* Action Buttons */}
                           <div className="flex items-center gap-2 shrink-0">
+                            {isActiveSocialService(service.service_type, service.status) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/portal/services/${service.id}/social`);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl text-xs font-semibold bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15 transition-all cursor-pointer shrink-0"
+                              >
+                                <TrendingUp className="w-3.5 h-3.5" />
+                                <span>Social analytics</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={(e) => {
