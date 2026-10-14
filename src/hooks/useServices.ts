@@ -19,44 +19,18 @@ export function useServices(projectId?: string, clientId?: string) {
       const { data, error } = await req;
       if (error) {
         console.error("Failed to fetch services:", error.message);
-        return [];
+        throw error;
       }
 
-      return (data || []).map((row: any) => {
-        let billing_type = row.billing_type || "one_time";
-        let next_billing_date = row.next_billing_date || null;
-        let billing_start_date = row.billing_start_date || null;
-        let billing_cycle_day: number | null = null;
-        let duration = row.duration || null;
-        let cleanSummary = row.summary || "";
-
-        if (cleanSummary.includes("[BILLING:")) {
-          try {
-            const match = cleanSummary.match(/\[BILLING:(.*?)\]/);
-            if (match && match[1]) {
-              const meta = JSON.parse(match[1]);
-              if (!row.billing_type && meta.type) billing_type = meta.type;
-              if (!row.next_billing_date && meta.next_billing_date) next_billing_date = meta.next_billing_date;
-              if (!row.billing_start_date && meta.billing_start_date) billing_start_date = meta.billing_start_date;
-              if (meta.billing_cycle_day != null) billing_cycle_day = meta.billing_cycle_day;
-              if (!row.duration && meta.duration) duration = meta.duration;
-              cleanSummary = cleanSummary.replace(/\[BILLING:.*?\]/, "").trim();
-            }
-          } catch (e) {
-            // ignore
-          }
-        }
-
-        return {
-          ...row,
-          billing_type,
-          next_billing_date,
-          billing_start_date,
-          billing_cycle_day,
-          duration,
-          summary: cleanSummary,
-        };
-      }) as Service[];
+      return (data || []).map((row: any) => ({
+        ...row,
+        billing_type: row.billing_type || "one_time",
+        next_billing_date: row.next_billing_date || null,
+        billing_start_date: row.billing_start_date || null,
+        billing_cycle_day: row.billing_cycle_day != null ? row.billing_cycle_day : 1,
+        duration: row.duration || null,
+        summary: (row.summary || "").replace(/\[BILLING:.*?\]/, "").trim(),
+      })) as Service[];
     },
   });
 
@@ -121,28 +95,13 @@ export function useServices(projectId?: string, clientId?: string) {
 
   const deleteServiceMutation = useMutation({
     mutationFn: async (id: string) => {
-      // 1. Clean up or cascade delete associated records so foreign keys don't block
-      await Promise.allSettled([
-        supabase.from("tasks").delete().eq("service_id", id),
-        supabase.from("milestones").delete().eq("service_id", id),
-        supabase.from("deliverables").delete().eq("service_id", id),
-        supabase.from("work_records").delete().eq("service_id", id),
-        supabase.from("approvals").delete().eq("service_id", id),
-        supabase.from("decisions").delete().eq("service_id", id),
-        supabase.from("files").delete().eq("service_id", id),
-      ]);
+      // Safe soft delete only: preserves related tasks, deliverables, milestones, and audit history
+      const { error: softDeleteErr } = await supabase
+        .from("services")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
 
-      // 2. Try hard delete first
-      const { error: hardDeleteErr } = await supabase.from("services").delete().eq("id", id);
-      if (hardDeleteErr) {
-        console.warn("Hard delete blocked, falling back to soft delete:", hardDeleteErr.message);
-        // 3. Fallback to soft delete
-        const { error: softDeleteErr } = await supabase
-          .from("services")
-          .update({ deleted_at: new Date().toISOString() })
-          .eq("id", id);
-        if (softDeleteErr) throw softDeleteErr;
-      }
+      if (softDeleteErr) throw softDeleteErr;
       return id;
     },
     onSuccess: (deletedId) => {

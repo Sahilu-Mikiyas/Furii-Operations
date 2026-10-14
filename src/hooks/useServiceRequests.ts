@@ -266,13 +266,22 @@ export function useServiceRequests(clientId?: string) {
     },
   });
 
-  // Manager approves and converts request into a real active project + service
+  // Manager approves and converts request into a real active project + service atomically
   const approveAndLaunchProjectMutation = useMutation({
     mutationFn: async (request: ServiceRequest) => {
-      const { data: org } = await supabase.from("organizations").select("id").limit(1).single();
-      const orgId = org?.id || request.organization_id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29";
+      // 1. Primary: Run as a single database transaction via RPC
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "approve_service_request",
+        { p_request_id: request.id }
+      );
 
-      // 1. Create the Project
+      if (!rpcError && rpcData?.success) {
+        return rpcData;
+      }
+
+      // 2. Resilient fallback if RPC is ever unreachable or pending migration
+      const orgId = request.organization_id || "72e3ff6d-96e6-4cc6-b904-d07327f43b29";
+
       const { data: project, error: projError } = await supabase
         .from("projects")
         .insert({
@@ -291,45 +300,31 @@ export function useServiceRequests(clientId?: string) {
 
       if (projError) throw projError;
 
-      // 2. Map service type
       let serviceType = "website";
       if (request.request_type === "branding") serviceType = "branding";
       else if (request.request_type === "production") serviceType = "content_production";
       else if (request.request_type === "development") serviceType = "website";
+      else if (request.request_type === "social_media") serviceType = "social_media";
 
-      // 3. Create the Service with Billing Model (with resilient fallback)
       const isRetainer = request.billing_type === "monthly_retainer";
       const startDate = new Date().toISOString().split("T")[0];
       const nextDate = isRetainer
         ? new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]
         : null;
 
-      const metaBilling = JSON.stringify({
-        type: request.billing_type || "one_time",
-        billing_start_date: startDate,
-        next_billing_date: nextDate,
-        billing_cycle_day: new Date().getDate(),
-        duration: request.duration || (isRetainer ? "Monthly Retainer" : "One-Time Engagement"),
-      });
-
-      const safeServicePayload = {
-        organization_id: orgId,
-        client_id: request.client_id,
-        project_id: project.id,
-        name: request.title,
-        service_type: serviceType,
-        description: request.description || "Active client delivery stream",
-        status: "in_progress",
-        current_phase: null,
-        progress: 0,
-        start_date: startDate,
-        summary: `[BILLING:${metaBilling}]`,
-      };
-
-      let { data: service, error: servError } = await supabase
+      const { data: service, error: servError } = await supabase
         .from("services")
         .insert({
-          ...safeServicePayload,
+          organization_id: orgId,
+          client_id: request.client_id,
+          project_id: project.id,
+          name: request.title,
+          service_type: serviceType,
+          description: request.description || "Active client delivery stream",
+          status: "in_progress",
+          current_phase: null,
+          progress: 0,
+          start_date: startDate,
           billing_type: request.billing_type || "one_time",
           billing_start_date: startDate,
           next_billing_date: nextDate,
@@ -337,68 +332,10 @@ export function useServiceRequests(clientId?: string) {
           duration: request.duration || (isRetainer ? "Monthly Retainer" : "One-Time Engagement"),
         })
         .select()
-        .maybeSingle();
-
-      if (servError && servError.message.includes("column")) {
-        const fallbackRes = await supabase
-          .from("services")
-          .insert(safeServicePayload)
-          .select()
-          .single();
-        service = fallbackRes.data;
-        servError = fallbackRes.error;
-      }
+        .single();
 
       if (servError) throw servError;
 
-      // 4. Initial service is left completely clean & empty.
-      // Admin/manager will populate milestones, tasks, deliverables, and phases as needed.
-
-      // 6. Create settled Invoice & Payment record for official accounting
-      try {
-        const invNum = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
-        const { data: inv } = await supabase
-          .from("invoices")
-          .insert({
-            organization_id: orgId,
-            client_id: request.client_id,
-            project_id: project.id,
-            invoice_number: invNum,
-            title: request.title,
-            total: request.estimated_total,
-            amount: request.estimated_total,
-            amount_paid: request.estimated_total,
-            currency: request.currency || "ETB",
-            due_date: new Date().toISOString().split("T")[0],
-            notes: request.description || `Settled engagement for ${request.title}`,
-            status: "paid",
-          })
-          .select()
-          .single();
-
-        if (inv) {
-          // Record payment
-          await supabase.from("payments").insert({
-            organization_id: orgId,
-            client_id: request.client_id,
-            project_id: project.id,
-            invoice_id: inv.id,
-            amount: request.estimated_total,
-            currency: request.currency || "ETB",
-            payment_date: request.payment_submitted_at
-              ? request.payment_submitted_at.split("T")[0]
-              : new Date().toISOString().split("T")[0],
-            method: "bank_transfer",
-            reference: request.payment_notes || `REC-${request.id.slice(0, 8).toUpperCase()}`,
-            receipt_url: request.receipt_url || null,
-            notes: "Verified & cleared upon service launch",
-          });
-        }
-      } catch (finErr) {
-        console.warn("Auto-ledger sync note:", finErr);
-      }
-
-      // 7. Mark Service Request as 'approved'
       const { error: reqUpdateError } = await supabase
         .from("service_requests")
         .update({
