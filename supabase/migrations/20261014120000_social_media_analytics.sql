@@ -3,12 +3,13 @@ ALTER TABLE public.services ADD COLUMN IF NOT EXISTS modules_disabled text[] NOT
 
 CREATE TABLE IF NOT EXISTS public.service_type_modules (
   service_type text NOT NULL,
-  module_key text NOT NULL,
-  PRIMARY KEY (service_type, module_key)
+  module text NOT NULL,
+  PRIMARY KEY (service_type, module)
 );
 ALTER TABLE public.service_type_modules ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS service_type_modules_staff_read ON public.service_type_modules;
 CREATE POLICY service_type_modules_staff_read ON public.service_type_modules FOR SELECT TO authenticated USING (public.is_staff());
-INSERT INTO public.service_type_modules (service_type, module_key) VALUES
+INSERT INTO public.service_type_modules (service_type, module) VALUES
   ('social_media', 'social_accounts'), ('social_media', 'social_analytics'), ('social_media', 'social_reports'),
   ('content_production', 'social_accounts'), ('content_production', 'social_analytics'), ('content_production', 'social_reports')
 ON CONFLICT DO NOTHING;
@@ -19,7 +20,7 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
     SELECT 1 FROM public.services s JOIN public.service_type_modules m ON m.service_type = s.service_type
     WHERE s.id = p_service AND s.deleted_at IS NULL
       AND s.status IN ('not_started','in_progress','waiting_for_client')
-      AND m.module_key = p_module AND NOT (p_module = ANY(s.modules_disabled))
+      AND m.module = p_module AND NOT (p_module = ANY(s.modules_disabled))
       AND ((public.is_staff() AND s.organization_id = public.current_org_id()) OR s.client_id IN (SELECT public.my_client_ids()))
   );
 $$;
@@ -84,23 +85,29 @@ ALTER TABLE public.social_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.social_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.social_reports ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS social_accounts_staff_all ON public.social_accounts;
 CREATE POLICY social_accounts_staff_all ON public.social_accounts FOR ALL TO authenticated
   USING (public.is_staff() AND organization_id = public.current_org_id())
   WITH CHECK (public.is_staff() AND organization_id = public.current_org_id()
     AND EXISTS (SELECT 1 FROM public.services s WHERE s.id = social_accounts.service_id AND s.client_id = social_accounts.client_id AND s.organization_id = social_accounts.organization_id AND public.service_has_module(s.id,'social_accounts')));
+DROP POLICY IF EXISTS social_accounts_client_read ON public.social_accounts;
 CREATE POLICY social_accounts_client_read ON public.social_accounts FOR SELECT TO authenticated
   USING (client_id IN (SELECT public.my_client_ids()) AND is_active AND public.service_has_module(service_id,'social_accounts'));
 
+DROP POLICY IF EXISTS social_snapshots_staff_read ON public.social_snapshots;
 CREATE POLICY social_snapshots_staff_read ON public.social_snapshots FOR SELECT TO authenticated
   USING (public.is_staff() AND EXISTS (SELECT 1 FROM public.social_accounts a WHERE a.id = account_id AND a.organization_id = public.current_org_id()));
+DROP POLICY IF EXISTS social_snapshots_client_read ON public.social_snapshots;
 CREATE POLICY social_snapshots_client_read ON public.social_snapshots FOR SELECT TO authenticated
   USING (EXISTS (SELECT 1 FROM public.social_accounts a WHERE a.id = account_id AND a.client_id IN (SELECT public.my_client_ids()) AND a.is_active AND public.service_has_module(a.service_id,'social_analytics')));
 
+DROP POLICY IF EXISTS social_reports_staff_all ON public.social_reports;
 CREATE POLICY social_reports_staff_all ON public.social_reports FOR ALL TO authenticated
   USING (public.is_staff() AND organization_id = public.current_org_id())
   WITH CHECK (public.is_staff() AND organization_id = public.current_org_id()
     AND public.service_has_module(service_id,'social_reports')
     AND EXISTS (SELECT 1 FROM public.services s WHERE s.id = social_reports.service_id AND s.client_id = social_reports.client_id AND s.organization_id = social_reports.organization_id));
+DROP POLICY IF EXISTS social_reports_client_read ON public.social_reports;
 CREATE POLICY social_reports_client_read ON public.social_reports FOR SELECT TO authenticated
   USING (client_id IN (SELECT public.my_client_ids()) AND status = 'published' AND public.service_has_module(service_id,'social_reports'));
 
@@ -126,7 +133,7 @@ BEGIN
     WHEN 'instagram' THEN ARRAY['followers','net_followers','accounts_reached','views','profile_visits','interactions','likes','saves','shares','comments']
     WHEN 'facebook' THEN ARRAY['page_followers','net_followers','reach','page_views','engagement','reactions','comments','shares','link_clicks']
     WHEN 'linkedin' THEN ARRAY['followers','net_followers','impressions','reactions','comments','reposts','link_clicks']
-    ELSE ARRAY[]::text[] END)) THEN RAISE EXCEPTION 'Metric key is not valid for this platform'; END IF;
+    ELSE ARRAY[]::text[] END))) THEN RAISE EXCEPTION 'Metric key is not valid for this platform'; END IF;
   IF EXISTS (SELECT 1 FROM jsonb_each(p_metrics) e WHERE jsonb_typeof(e.value) <> 'number' OR (e.value #>> '{}')::numeric < 0 OR (e.value #>> '{}')::numeric <> trunc((e.value #>> '{}')::numeric)) THEN
     RAISE EXCEPTION 'Metrics must be non-negative whole numbers';
   END IF;
@@ -153,9 +160,11 @@ GRANT EXECUTE ON FUNCTION public.save_social_snapshot(uuid,date,text,jsonb,text,
 
 INSERT INTO storage.buckets(id,name,public) VALUES ('social-reports','social-reports',false),('social-proofs','social-proofs',false)
 ON CONFLICT (id) DO UPDATE SET public=false;
+DROP POLICY IF EXISTS social_storage_staff ON storage.objects;
 CREATE POLICY social_storage_staff ON storage.objects FOR ALL TO authenticated
   USING (bucket_id IN ('social-reports','social-proofs') AND public.is_staff() AND (storage.foldername(name))[1] = public.current_org_id()::text)
   WITH CHECK (bucket_id IN ('social-reports','social-proofs') AND public.is_staff() AND (storage.foldername(name))[1] = public.current_org_id()::text);
+DROP POLICY IF EXISTS social_reports_client_files ON storage.objects;
 CREATE POLICY social_reports_client_files ON storage.objects FOR SELECT TO authenticated
   USING (bucket_id='social-reports' AND EXISTS (
     SELECT 1 FROM public.social_reports r

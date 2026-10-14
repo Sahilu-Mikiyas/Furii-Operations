@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownToLine, AtSign, BarChart3, Check, Clock3, History, Plus, Save, Users } from "lucide-react";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -260,7 +261,7 @@ export function AdminSocialPage() {
     finally { setReportSaving(false); }
   };
 
-  return <div className="space-y-6">
+  return <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: "easeOut" }} className="space-y-6">
     <PageHeader title="Social Analytics" description="Manage connected profiles, enter the twice-daily metrics, and keep a clear correction history." actions={<button onClick={() => { setEditAccount(null); setAccountForm({ service_id: eligibleServices[0]?.id || "", platform: "instagram", handle: "", display_name: "", profile_url: "" }); setShowAccountForm(true); }} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"><Plus className="h-4 w-4"/>Add account</button>} />
     <div className="grid gap-3 sm:grid-cols-3">
       <Summary icon={<AtSign/>} label="Active profiles" value={accounts.filter((a: any) => a.is_active).length}/>
@@ -309,11 +310,11 @@ export function AdminSocialPage() {
     </div>}
 
     {showAccountForm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowAccountForm(false); }}><div className="w-full max-w-lg space-y-4 rounded-2xl bg-card p-6 shadow-xl"><div><h2 className="text-lg font-semibold">{editAccount ? "Edit social profile" : "Connect social profile"}</h2><p className="text-sm text-muted-foreground">Profile details are maintained by the Furii team.</p></div><label className="block text-xs font-medium">Service workspace<select className="mt-1 w-full rounded-lg border bg-background p-2.5 text-sm" value={accountForm.service_id} onChange={(e) => setAccountForm((v) => ({ ...v, service_id: e.target.value }))}><option value="">Choose service</option>{eligibleServices.map((s) => <option key={s.id} value={s.id}>{clientName(s.client_id)} · {s.name}</option>)}</select></label><label className="block text-xs font-medium">Platform<select disabled={!!editAccount} className="mt-1 w-full rounded-lg border bg-background p-2.5 text-sm" value={accountForm.platform} onChange={(e) => setAccountForm((v) => ({ ...v, platform: e.target.value as SocialPlatform }))}>{SOCIAL_PLATFORMS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label><label className="block text-xs font-medium">Display name<input className="mt-1 w-full rounded-lg border bg-background p-2.5 text-sm" value={accountForm.display_name} onChange={(e) => setAccountForm((v) => ({ ...v, display_name: e.target.value }))} placeholder="Brand account"/></label><label className="block text-xs font-medium">Handle<input className="mt-1 w-full rounded-lg border bg-background p-2.5 text-sm" value={accountForm.handle} onChange={(e) => setAccountForm((v) => ({ ...v, handle: e.target.value }))} placeholder="brandhandle"/></label><label className="block text-xs font-medium">Profile URL (optional)<input type="url" className="mt-1 w-full rounded-lg border bg-background p-2.5 text-sm" value={accountForm.profile_url} onChange={(e) => setAccountForm((v) => ({ ...v, profile_url: e.target.value }))} placeholder="https://"/></label><div className="flex justify-end gap-2"><button onClick={() => setShowAccountForm(false)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button><button onClick={saveAccount} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"><Check className="h-4 w-4"/>Save profile</button></div></div></div>}
-  </div>;
+  </motion.div>;
 }
 
 function Summary({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
-  return <div className="flex items-center gap-3 rounded-xl border bg-card p-4"><span className="text-primary">{icon}</span><div><p className="text-xs text-muted-foreground">{label}</p><p className="text-xl font-bold">{value}</p></div></div>;
+  return <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} whileHover={{ y: -3, scale: 1.01 }} transition={{ duration: 0.25 }} className="flex items-center gap-3 rounded-xl border bg-card p-4"><span className="text-primary">{icon}</span><div><p className="text-xs text-muted-foreground">{label}</p><motion.p key={value} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="text-xl font-bold tabular-nums">{value}</motion.p></div></motion.div>;
 }
 
 function parseCsv(text: string): string[][] {
