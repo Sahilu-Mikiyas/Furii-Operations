@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Shield,
   ShieldCheck,
@@ -13,7 +13,6 @@ import {
   Eye,
   EyeOff,
   Building,
-  Zap,
   CheckCircle2,
 } from "lucide-react";
 import { FuriiLogo } from "@/components/shared/FuriiLogo";
@@ -22,33 +21,6 @@ interface UnifiedAuthViewProps {
   initialRole?: "agency" | "client";
 }
 
-const DEMO_PRESETS = [
-  {
-    label: "Admin Command",
-    email: "admin@furii.agency",
-    role: "agency" as const,
-    name: "Mikiyas",
-  },
-  {
-    label: "Operations PM",
-    email: "pm@furii.agency",
-    role: "agency" as const,
-    name: "Bezawit",
-  },
-  {
-    label: "Client Partner",
-    email: "client@solomongold.et",
-    role: "client" as const,
-    name: "Solomon Gold",
-  },
-  {
-    label: "Ersas Client",
-    email: "mickeysahilu@gmail.com",
-    role: "client" as const,
-    name: "Ersas Interiors",
-  },
-];
-
 export function UnifiedAuthView({ initialRole = "agency" }: UnifiedAuthViewProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"agency" | "client">(initialRole);
@@ -56,7 +28,6 @@ export function UnifiedAuthView({ initialRole = "agency" }: UnifiedAuthViewProps
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showQuickFill, setShowQuickFill] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,13 +81,6 @@ export function UnifiedAuthView({ initialRole = "agency" }: UnifiedAuthViewProps
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSelectPreset = (preset: (typeof DEMO_PRESETS)[0]) => {
-    setActiveTab(preset.role);
-    setEmail(preset.email);
-    setPassword("password123");
-    toast.info(`Filled credentials for ${preset.label}`);
   };
 
   return (
@@ -300,58 +264,6 @@ export function UnifiedAuthView({ initialRole = "agency" }: UnifiedAuthViewProps
             </button>
           </form>
 
-          {/* Quick Demo Fill Section */}
-          <div className="pt-2 border-t border-neutral-100 space-y-2">
-            <button
-              type="button"
-              onClick={() => setShowQuickFill(!showQuickFill)}
-              className="w-full flex items-center justify-between text-[11px] font-semibold text-neutral-500 hover:text-black py-1 cursor-pointer transition-colors"
-            >
-              <span className="flex items-center gap-1.5">
-                <Zap className="w-3 h-3 text-amber-500" />
-                Quick Test Credentials
-              </span>
-              <span className="font-mono text-[10px] text-neutral-400">
-                {showQuickFill ? "Hide ▲" : "Show ▼"}
-              </span>
-            </button>
-
-            <AnimatePresence>
-              {showQuickFill && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden space-y-1.5 pt-1"
-                >
-                  <p className="text-[10px] text-neutral-400">
-                    Click any preset below to auto-populate credentials:
-                  </p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {DEMO_PRESETS.map((preset) => (
-                      <button
-                        key={preset.email}
-                        type="button"
-                        onClick={() => handleSelectPreset(preset)}
-                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
-                          email === preset.email
-                            ? "border-black bg-neutral-900 text-white shadow-2xs"
-                            : "border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-800"
-                        }`}
-                      >
-                        <div className="text-[11px] font-semibold truncate">
-                          {preset.label}
-                        </div>
-                        <div className="text-[10px] opacity-70 truncate font-mono">
-                          {preset.name}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
         </motion.div>
       </main>
 
