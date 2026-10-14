@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownToLine, ArrowLeft, ExternalLink, Eye, Heart, Info, MessageCircle, MousePointer2, Share2, TrendingUp, Users, Video } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, BarChart3, ExternalLink, Eye, Heart, Info, MessageCircle, MousePointer2, Share2, TrendingUp, Users, Video } from "lucide-react";
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { toast } from "sonner";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, BarChart, Bar, ReferenceLine } from "recharts";
@@ -53,7 +53,7 @@ export function ClientSocialPage() {
   });
 
   const definitions = SOCIAL_METRICS[platform];
-  const selectedMetricKey = definitions.some((m) => m.key === metricKey) ? metricKey : definitions.find((m) => m.primary)?.key || definitions[0].key;
+  const selectedMetricKey = definitions.some((m) => m.key === metricKey) ? metricKey : definitions.find((m) => m.primary)?.key || definitions[0]?.key || "";
   const metric = definitions.find((m) => m.key === selectedMetricKey)!;
   const latest = snapshots.at(-1);
   const previous = snapshots.length > 1 ? snapshots.at(-2) : undefined;
