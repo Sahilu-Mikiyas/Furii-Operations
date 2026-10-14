@@ -17,6 +17,7 @@ import {
   PanelLeftClose,
   Sparkles,
   ListTodo,
+  Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FuriiLogo } from "@/components/shared/FuriiLogo";
@@ -40,6 +41,7 @@ const ADMIN_NAV = [
   { label: "Asset Vault", href: "/admin/files", icon: FolderOpen },
   { label: "Production Schedule", href: "/admin/calendar", icon: Calendar },
   { label: "Executive Debriefs", href: "/admin/reports", icon: BarChart3 },
+  { label: "Social Analytics", href: "/admin/social", icon: Share2 },
   { label: "Agency Settings", href: "/admin/settings", icon: Settings },
 ];
 
