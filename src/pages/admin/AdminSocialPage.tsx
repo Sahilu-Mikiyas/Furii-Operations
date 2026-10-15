@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { useAuth } from "@/lib/auth";
 import { useClients } from "@/hooks/useClients";
 import { useServices } from "@/hooks/useServices";
-import { addisDate, formatSocialNumber, isActiveSocialService, SOCIAL_METRICS, SOCIAL_PLATFORMS, type SocialPlatform } from "@/lib/socialAnalytics";
+import { addisDate, formatSocialNumber, isActiveSocialService, SOCIAL_METRICS, SOCIAL_PLATFORMS, type SocialMetric, type SocialPlatform } from "@/lib/socialAnalytics";
 import { supabase } from "@/integrations/supabase/client";
 
 const db = supabase as any;
@@ -25,6 +25,7 @@ export function AdminSocialPage() {
   const [slotDate, setSlotDate] = useState(addisDate());
   const [slot, setSlot] = useState<"am" | "pm">(new Date().toLocaleString("en-GB", { timeZone: "Africa/Addis_Ababa", hour: "2-digit", hour12: false }).startsWith("0") ? "am" : "pm");
   const [metricValues, setMetricValues] = useState<Record<string, string>>({});
+  const [metricDirections, setMetricDirections] = useState<Record<string, "increase" | "decrease">>({});
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [showAccountForm, setShowAccountForm] = useState(false);
@@ -59,6 +60,18 @@ export function AdminSocialPage() {
     },
     enabled: !!accountId,
   });
+  const { data: priorSlots = [], isLoading: priorLoading } = useQuery({
+    queryKey: ["social-prior-slot", accountId, slotDate, slot],
+    queryFn: async () => {
+      const { data, error } = await db.from("social_snapshots").select("id,slot_date,slot,revision,metrics")
+        .eq("account_id", accountId)
+        .or(`slot_date.lt.${slotDate},and(slot_date.eq.${slotDate},slot.lt.${slot})`)
+        .order("slot_date", { ascending: false }).order("slot", { ascending: false }).order("revision", { ascending: false }).limit(1);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!accountId && !!slotDate,
+  });
   const { data: reports = [] } = useQuery({
     queryKey: ["social-reports", organizationId],
     queryFn: async () => {
@@ -90,18 +103,59 @@ export function AdminSocialPage() {
   const platform = (selectedAccount?.platform || "instagram") as SocialPlatform;
   const metricCatalog = SOCIAL_METRICS[platform];
   const latestForSlot = snapshots.find((s: any) => s.slot_date === slotDate && s.slot === slot);
+  const previousSnapshot = priorSlots[0];
+  const followerMetric = metricCatalog.find((metric) => metric.primary);
+  const followerKey = followerMetric?.key;
+  const hasPriorFollowerTotal = followerKey && typeof previousSnapshot?.metrics?.[followerKey] === "number";
   const serviceName = (id: string) => eligibleServices.find((s) => s.id === id)?.name || "Service workspace";
   const clientName = (id: string) => clients.find((c) => c.id === id)?.name || "Client";
 
   useEffect(() => {
     if (latestForSlot) {
-      setMetricValues(Object.fromEntries(Object.entries(latestForSlot.metrics || {}).map(([key, value]) => [key, String(value)])));
+      const changes: Record<string, string> = {};
+      const directions: Record<string, "increase" | "decrease"> = {};
+      for (const metric of metricCatalog.filter((item) => item.key !== "net_followers")) {
+        const current = latestForSlot.metrics?.[metric.key];
+        if (typeof current !== "number") continue;
+        const prior = previousSnapshot?.metrics?.[metric.key];
+        if (typeof prior === "number") {
+          const difference = current - prior;
+          changes[metric.key] = String(Math.abs(difference));
+          directions[metric.key] = difference < 0 ? "decrease" : "increase";
+        } else {
+          changes[metric.key] = String(current);
+          directions[metric.key] = "increase";
+        }
+      }
+      setMetricValues(changes);
+      setMetricDirections(directions);
       setNote("");
     } else {
       setMetricValues({});
+      setMetricDirections({});
       setNote("");
     }
-  }, [accountId, slotDate, slot, latestForSlot?.id]);
+  }, [accountId, slotDate, slot, latestForSlot?.id, previousSnapshot?.id, platform]);
+
+  const previewTotals = useMemo(() => {
+    const totals: Record<string, number | undefined> = {};
+    for (const metric of metricCatalog.filter((item) => item.key !== "net_followers")) {
+      const prior = previousSnapshot?.metrics?.[metric.key];
+      const raw = metricValues[metric.key]?.trim();
+      if (!raw) {
+        if (typeof prior === "number") totals[metric.key] = prior;
+        continue;
+      }
+      const amount = Number(raw);
+      totals[metric.key] = typeof prior !== "number" ? amount : prior + (metricDirections[metric.key] === "decrease" ? -amount : amount);
+    }
+    const previousFollowers = followerKey ? previousSnapshot?.metrics?.[followerKey] : undefined;
+    const currentFollowers = followerKey ? totals[followerKey] ?? previousFollowers : undefined;
+    if (typeof currentFollowers === "number") {
+      totals["net_followers"] = typeof previousFollowers === "number" ? currentFollowers - previousFollowers : currentFollowers;
+    }
+    return totals;
+  }, [metricCatalog, metricValues, metricDirections, previousSnapshot?.id, followerKey]);
 
   const loadAccountForEdit = (account: any) => {
     setEditAccount(account);
@@ -129,16 +183,29 @@ export function AdminSocialPage() {
     if (!selectedAccount) { toast.error("Select a social account first."); return; }
     if (latestForSlot && !note.trim()) { toast.error("Add a correction note when replacing a saved entry."); return; }
     const metrics: Record<string, number> = {};
-    for (const [key, raw] of Object.entries(metricValues)) {
-      if (raw.trim() === "") continue;
-      const n = Number(raw);
-      if (!Number.isSafeInteger(n) || n < 0) { toast.error("Metrics must be non-negative whole numbers."); return; }
-      metrics[key] = n;
+    let enteredMetric = false;
+    for (const metric of metricCatalog.filter((item) => item.key !== "net_followers")) {
+      const raw = metricValues[metric.key]?.trim() || "";
+      const previousTotal = previousSnapshot?.metrics?.[metric.key];
+      if (!raw) {
+        if (typeof previousTotal === "number") metrics[metric.key] = previousTotal;
+        continue;
+      }
+      enteredMetric = true;
+      const amount = Number(raw);
+      if (!Number.isSafeInteger(amount) || amount < 0) { toast.error("Enter non-negative whole-number changes."); return; }
+      const total = typeof previousTotal !== "number"
+        ? amount
+        : previousTotal + (metricDirections[metric.key] === "decrease" ? -amount : amount);
+      if (total < 0) { toast.error(`${metric.label} cannot go below zero.`); return; }
+      metrics[metric.key] = total;
     }
-    if (!Object.keys(metrics).length) { toast.error("Enter at least one metric."); return; }
-    const previous = [...snapshots]
-      .filter((item: any) => item.slot_date < slotDate || (item.slot_date === slotDate && item.slot < slot))
-      .sort((a: any, b: any) => b.slot_date.localeCompare(a.slot_date) || b.slot.localeCompare(a.slot) || b.revision - a.revision)[0];
+    if (!enteredMetric) { toast.error("Enter a starting total or at least one metric change."); return; }
+    const previous = previousSnapshot;
+    if (followerKey && typeof metrics[followerKey] === "number") {
+      const before = previous?.metrics?.[followerKey];
+      metrics["net_followers"] = typeof before === "number" ? metrics[followerKey] - before : metrics[followerKey];
+    }
     const warnings: string[] = [];
     for (const key of ["followers", "page_followers"]) {
       const before = Number(previous?.metrics?.[key]); const after = metrics[key];
@@ -167,7 +234,8 @@ export function AdminSocialPage() {
   };
 
   const downloadCsvTemplate = () => {
-    const rows = [["account_handle", "platform", "slot_date", "slot", ...metricCatalog.map((m) => m.key), "note"], [selectedAccount?.handle || "", platform, slotDate, slot, ...metricCatalog.map(() => ""), ""]];
+    const csvMetrics = metricCatalog.filter((metric) => metric.key !== "net_followers");
+    const rows = [["account_handle", "platform", "slot_date", "slot", ...csvMetrics.map((m) => m.key), "note"], [selectedAccount?.handle || "", platform, slotDate, slot, ...csvMetrics.map(() => ""), ""]];
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\r\n");
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = `social-${platform}-template.csv`; a.click(); URL.revokeObjectURL(a.href);
   };
@@ -273,7 +341,7 @@ export function AdminSocialPage() {
     </div>
 
     {tab === "entry" && <section className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Enter channel metrics</h2><p className="text-sm text-muted-foreground">Record the latest platform totals. A correction is saved as a new revision.</p></div><div className="flex gap-2"><button onClick={downloadCsvTemplate} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"><ArrowDownToLine className="h-4 w-4"/>CSV template</button><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm">Import CSV<input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { void loadCsv(e.target.files?.[0]); e.currentTarget.value = ""; }}/></label></div></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Enter channel metrics</h2><p className="text-sm text-muted-foreground">The form records increases and decreases; CSV imports use absolute totals. Net followers is always calculated automatically.</p></div><div className="flex gap-2"><button onClick={downloadCsvTemplate} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"><ArrowDownToLine className="h-4 w-4"/>CSV template</button><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm">Import CSV<input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { void loadCsv(e.target.files?.[0]); e.currentTarget.value = ""; }}/></label></div></div>
       {csvPreview.length > 0 && <div className="space-y-3 rounded-xl border bg-secondary/20 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">CSV preview · {csvPreview.length} row(s)</p><p className="text-xs text-muted-foreground">Rows are checked and saved individually; invalid rows will be reported below.</p></div><button disabled={csvSaving} onClick={importCsv} className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50">{csvSaving ? "Importing…" : "Import rows"}</button></div><div className="max-h-44 overflow-auto rounded-lg border bg-background"><table className="w-full text-left text-xs"><thead className="sticky top-0 bg-secondary"><tr>{Object.keys(csvPreview[0] || {}).slice(0, 8).map((key) => <th key={key} className="p-2 font-semibold">{key}</th>)}</tr></thead><tbody>{csvPreview.slice(0, 10).map((row, i) => <tr key={i} className="border-t">{Object.keys(csvPreview[0] || {}).slice(0, 8).map((key) => <td key={key} className="p-2">{row[key]}</td>)}</tr>)}</tbody></table></div>{csvResults.length > 0 && <div className="max-h-28 overflow-auto space-y-1 text-xs">{csvResults.map((line) => <p key={line} className={line.endsWith("imported.") ? "text-emerald-700" : "text-rose-700"}>{line}</p>)}</div>}</div>}
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-xs font-medium">Account<select className="mt-1 block w-full rounded-lg border bg-background p-2.5 text-sm" value={accountId} onChange={(e) => { setAccountId(e.target.value); setMetricValues({}); }}><option value="">Choose a profile</option>{accounts.map((a: any) => <option key={a.id} value={a.id}>{clientName(a.client_id)} · {a.display_name} (@{a.handle})</option>)}</select></label>
@@ -282,9 +350,11 @@ export function AdminSocialPage() {
       </div>
       {selectedAccount && <div className="flex items-center gap-2 rounded-lg bg-secondary/50 px-3 py-2 text-sm"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SOCIAL_PLATFORMS.find(p => p.id === platform)?.color }}/><b>{selectedAccount.display_name}</b><span className="text-muted-foreground">@{selectedAccount.handle} · {serviceName(selectedAccount.service_id)}</span>{latestForSlot && <span className="ml-auto rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-800">Revision {latestForSlot.revision} exists</span>}</div>}
       {!accounts.length && !isLoading ? <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Add a platform account to begin entering analytics.</p> : <>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{metricCatalog.map((metric) => <label key={metric.key} className="text-xs font-medium">{metric.label}{metric.hint && <span className="ml-1 font-normal text-muted-foreground">· {metric.hint}</span>}<input inputMode="numeric" min="0" step="1" type="number" className="mt-1 block w-full rounded-lg border bg-background p-2.5 text-sm" placeholder="Enter value" value={metricValues[metric.key] || ""} onChange={(e) => setMetricValues((old) => ({ ...old, [metric.key]: e.target.value }))}/></label>)}</div>
+        <div className="flex items-start gap-3 rounded-xl border border-primary/15 bg-primary/5 p-4"><div className="rounded-lg bg-primary/10 p-2 text-primary"><BarChart3 className="h-4 w-4"/></div><div><p className="text-sm font-semibold">{previousSnapshot ? "Enter changes since the last snapshot" : "Set the starting totals"}</p><p className="mt-0.5 text-xs text-muted-foreground">{previousSnapshot ? "Choose increase or decrease for each metric. New totals and net follower change are calculated automatically." : "The first follower count becomes the starting net followers value. Later net follower values are calculated from increases or decreases."}</p></div></div>
+        {priorLoading ? <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Loading the previous totals…</p> : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{metricCatalog.filter((metric) => metric.key !== "net_followers").map((metric) => <MetricEntryField key={metric.key} metric={metric} previousTotal={previousSnapshot?.metrics?.[metric.key]} amount={metricValues[metric.key] || ""} direction={metricDirections[metric.key] || "increase"} total={previewTotals[metric.key]} onAmountChange={(value) => setMetricValues((old) => ({ ...old, [metric.key]: value }))} onDirectionChange={(value) => setMetricDirections((old) => ({ ...old, [metric.key]: value }))}/>)}</div>}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background p-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Net followers</p><p className="mt-1 text-sm text-muted-foreground">Starts at the initial follower count, then tracks each increase or decrease automatically.</p></div><div className={`rounded-lg px-3 py-2 text-sm font-bold tabular-nums ${typeof previewTotals["net_followers"] === "number" && previewTotals["net_followers"] < 0 ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{typeof previewTotals["net_followers"] === "number" ? `${hasPriorFollowerTotal && previewTotals["net_followers"] > 0 ? "+" : ""}${formatSocialNumber(previewTotals["net_followers"])}` : "Enter follower count"}</div></div>
         {latestForSlot && <label className="block text-xs font-medium">Correction note (required for a saved slot)<textarea className="mt-1 block min-h-20 w-full rounded-lg border bg-background p-3 text-sm" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Explain the correction for the audit trail"/></label>}
-        <div className="flex justify-end"><button disabled={saving || !selectedAccount} onClick={saveSnapshot} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"><Save className="h-4 w-4"/>{saving ? "Saving…" : latestForSlot ? "Save correction" : "Save snapshot"}</button></div>
+        <div className="flex justify-end"><button disabled={saving || priorLoading || !selectedAccount} onClick={saveSnapshot} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"><Save className="h-4 w-4"/>{saving ? "Saving…" : latestForSlot ? "Save correction" : "Save snapshot"}</button></div>
       </>}
     </section>}
 
@@ -315,6 +385,44 @@ export function AdminSocialPage() {
 
 function Summary({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
   return <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} whileHover={{ y: -3, scale: 1.01 }} transition={{ duration: 0.25 }} className="flex items-center gap-3 rounded-xl border bg-card p-4"><span className="text-primary">{icon}</span><div><p className="text-xs text-muted-foreground">{label}</p><motion.p key={value} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="text-xl font-bold tabular-nums">{value}</motion.p></div></motion.div>;
+}
+
+function MetricEntryField({
+  metric,
+  previousTotal,
+  amount,
+  direction,
+  total,
+  onAmountChange,
+  onDirectionChange,
+}: {
+  metric: SocialMetric;
+  previousTotal: number | undefined;
+  amount: string;
+  direction: "increase" | "decrease";
+  total: number | undefined;
+  onAmountChange: (value: string) => void;
+  onDirectionChange: (value: "increase" | "decrease") => void;
+}) {
+  const isBaseline = typeof previousTotal !== "number";
+  return (
+    <div className="rounded-xl border bg-card p-3.5">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold">{metric.label}</p>
+          {metric.hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{metric.hint}</p>}
+        </div>
+        <span className="rounded-md bg-secondary px-2 py-1 text-[10px] font-medium text-muted-foreground">{isBaseline ? "Starting total" : `Current ${formatSocialNumber(previousTotal)}`}</span>
+      </div>
+      {!isBaseline && <div className="mt-3 grid grid-cols-2 rounded-lg bg-secondary/70 p-1">
+        {(["increase", "decrease"] as const).map((value) => <button key={value} type="button" onClick={() => onDirectionChange(value)} className={`rounded-md px-2 py-1.5 text-xs font-semibold capitalize transition-colors ${direction === value ? value === "increase" ? "bg-emerald-600 text-white shadow-sm" : "bg-rose-600 text-white shadow-sm" : "text-muted-foreground hover:bg-background"}`}>{value}</button>)}
+      </div>}
+      <label className="mt-3 block text-[11px] font-medium text-muted-foreground">{isBaseline ? "Initial count" : `${direction === "increase" ? "Add" : "Subtract"} this update`}
+        <input inputMode="numeric" min="0" step="1" type="number" className="mt-1 block w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground" placeholder={isBaseline ? "Enter starting total" : "Enter change amount"} value={amount} onChange={(event) => onAmountChange(event.target.value)}/>
+      </label>
+      <p className="mt-2 text-[11px] text-muted-foreground">{typeof total === "number" ? `${isBaseline ? "Baseline" : "Updated total"}: ${formatSocialNumber(total)}` : "Total will appear here"}</p>
+    </div>
+  );
 }
 
 function parseCsv(text: string): string[][] {
