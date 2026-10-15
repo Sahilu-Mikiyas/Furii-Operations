@@ -131,6 +131,7 @@ BEGIN
   SELECT s.* INTO v_row FROM public.installment_schedule s JOIN public.installment_plans p ON p.id=s.plan_id
   WHERE s.id=p_schedule_id AND p.client_id IN (SELECT public.my_client_ids()) FOR UPDATE OF s;
   IF NOT FOUND OR v_row.status NOT IN ('due','overdue','upcoming') OR v_row.due_date>CURRENT_DATE OR v_row.receipt_url IS NOT NULL THEN RAISE EXCEPTION 'This bill cannot accept a receipt right now'; END IF;
+  IF EXISTS (SELECT 1 FROM public.installment_plans WHERE id=v_row.plan_id AND status='completed') THEN RAISE EXCEPTION 'This installment plan is already paid in full'; END IF;
   SELECT EXISTS (SELECT 1 FROM public.installment_schedule WHERE plan_id=v_row.plan_id AND sequence=-1 AND status IN ('due','payment_submitted')) INTO v_payoff_pending;
   IF v_payoff_pending AND v_row.sequence<>-1 THEN RAISE EXCEPTION 'An early payoff is already pending; submit only the payoff bill'; END IF;
   IF p_receipt_url IS NULL OR length(trim(p_receipt_url))=0 THEN RAISE EXCEPTION 'Receipt is required'; END IF;
@@ -169,7 +170,8 @@ BEGIN
     END IF;
     UPDATE public.service_requests SET status='approved',manager_notes='Installment down payment verified; service launched.',updated_at=now() WHERE id=v_plan.request_id;
   ELSIF v_row.sequence=-1 THEN
-    UPDATE public.installment_schedule SET status='settled' WHERE plan_id=v_plan.id AND sequence>0 AND status='upcoming';
+    UPDATE public.installment_schedule SET status='settled' WHERE plan_id=v_plan.id AND id<>p_schedule_id AND status IN ('due','overdue','upcoming');
+    UPDATE public.invoices SET status='cancelled',updated_at=now() WHERE id IN (SELECT invoice_id FROM public.installment_schedule WHERE plan_id=v_plan.id AND id<>p_schedule_id AND status='settled');
   END IF;
   SELECT coalesce(sum(amount),0) INTO v_paid FROM public.installment_schedule WHERE plan_id=v_plan.id AND status='paid';
   IF v_paid>=v_plan.total_amount THEN UPDATE public.installment_plans SET status='completed',updated_at=now() WHERE id=v_plan.id;
