@@ -199,3 +199,6 @@ END $$;
 
 REVOKE EXECUTE ON FUNCTION public.submit_installment_request(text,text,text,jsonb,numeric,numeric,integer,text), public.review_installment_plan(uuid,text,text,numeric,numeric,integer), public.accept_installment_terms(uuid), public.submit_installment_payment(uuid,text,text,text), public.verify_installment_payment(uuid,boolean,text), public.request_installment_payoff(uuid) FROM public, anon;
 GRANT EXECUTE ON FUNCTION public.submit_installment_request(text,text,text,jsonb,numeric,numeric,integer,text), public.review_installment_plan(uuid,text,text,numeric,numeric,integer), public.accept_installment_terms(uuid), public.submit_installment_payment(uuid,text,text,text), public.verify_installment_payment(uuid,boolean,text), public.request_installment_payoff(uuid) TO authenticated;
+
+-- Make newly created RPC signatures visible to Supabase's PostgREST API.
+NOTIFY pgrst, 'reload schema';
