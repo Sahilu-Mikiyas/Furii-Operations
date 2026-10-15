@@ -18,6 +18,7 @@ import {
   Sparkles,
   ListTodo,
   Share2,
+  CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FuriiLogo } from "@/components/shared/FuriiLogo";
@@ -38,6 +39,7 @@ const ADMIN_NAV = [
   { label: "Checklists & QA", href: "/admin/checklists", icon: ListTodo },
   { label: "Review Queue", href: "/admin/approvals", icon: FileCheck2 },
   { label: "Financials", href: "/admin/payments", icon: Receipt },
+  { label: "Installment Plans", href: "/admin/installments", icon: CalendarClock },
   { label: "Asset Vault", href: "/admin/files", icon: FolderOpen },
   { label: "Production Schedule", href: "/admin/calendar", icon: Calendar },
   { label: "Executive Debriefs", href: "/admin/reports", icon: BarChart3 },

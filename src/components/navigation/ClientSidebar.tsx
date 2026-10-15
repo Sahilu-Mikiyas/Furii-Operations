@@ -14,6 +14,7 @@ import {
   Building2,
   Sparkles,
   PanelLeftClose,
+  CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FuriiLogo } from "@/components/shared/FuriiLogo";
@@ -37,7 +38,7 @@ export function ClientSidebar({
 
   const { approvals } = useApprovals(currentClient?.id);
   const pendingApprovalsCount = approvals.filter(
-    (a) => a.status === "awaiting_review" || a.status === "pending"
+    (a) => a.status === "awaiting_review"
   ).length;
 
   const isClientRole = role === "client" || role === "client_owner" || role === "client_member";
@@ -54,7 +55,10 @@ export function ClientSidebar({
     },
     { label: "Brand & Asset Vault", href: "/portal/files", icon: FolderOpen },
     ...(isClientRole
-      ? [{ label: "Financial Statement", href: "/portal/financials", icon: Receipt }]
+      ? [
+          { label: "Financial Statement", href: "/portal/financials", icon: Receipt },
+          { label: "Installment Plans", href: "/portal/installments", icon: CalendarClock },
+        ]
       : []),
     { label: "Production Timeline", href: "/portal/schedule", icon: Calendar },
   ];

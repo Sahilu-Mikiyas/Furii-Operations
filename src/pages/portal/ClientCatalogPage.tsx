@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useServiceRequests } from "@/hooks/useServiceRequests";
+import { useInstallmentPlans } from "@/hooks/useInstallmentPlans";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -37,6 +38,7 @@ export function ClientCatalogPage() {
   const navigate = useNavigate();
   const { currentClient, currency } = useAuth();
   const { createRequest, isCreating } = useServiceRequests();
+  const { submitRequest: submitInstallmentRequest, isSaving: isSavingPlan } = useInstallmentPlans();
 
   const [activeTab, setActiveTab] = useState<"packages" | "development" | "branding" | "production" | "build_myself">("packages");
   const [expandedPackage, setExpandedPackage] = useState<string | null>("pkg-real-estate");
@@ -58,6 +60,9 @@ export function ClientCatalogPage() {
     estimatedTotal: number;
     items: any[];
     description?: string;
+    paymentPlan?: boolean;
+    downPayment?: number;
+    installmentCount?: number;
   } | null>(null);
 
   // Success Confirmation State
@@ -66,6 +71,7 @@ export function ClientCatalogPage() {
     requestId: string;
     title: string;
     total: number;
+    paymentPlan?: boolean;
   } | null>(null);
 
   // Toggle Dev Addons
@@ -97,12 +103,30 @@ export function ClientCatalogPage() {
     }, 0);
   };
 
+  const minimumDown = Math.ceil((confirmModal?.estimatedTotal || 0) * 0.4);
+  const selectedDown = confirmModal?.downPayment ?? minimumDown;
+  const remainingAfterDown = Math.max((confirmModal?.estimatedTotal || 0) - selectedDown, 0);
+  const maxInstallments = Math.min(24, Math.floor(remainingAfterDown / 15000));
+  const selectedInstallments = confirmModal?.installmentCount ?? 1;
+  const monthlyBase = selectedInstallments ? Math.floor((remainingAfterDown / selectedInstallments) * 100) / 100 : 0;
+  const monthlyLast = Math.round((remainingAfterDown - monthlyBase * Math.max(selectedInstallments - 1, 0)) * 100) / 100;
+
   // Handle Submit Request
   const handleConfirmRequest = async () => {
     if (!confirmModal) return;
 
     try {
-      const res = await createRequest({
+      const res = confirmModal.paymentPlan
+        ? { id: String(await submitInstallmentRequest({
+            title: confirmModal.title,
+            description: confirmModal.description || "",
+            requestType: confirmModal.type,
+            items: confirmModal.items,
+            total: confirmModal.estimatedTotal,
+            down: confirmModal.downPayment || confirmModal.estimatedTotal,
+            count: confirmModal.installmentCount || 1,
+          })) }
+        : await createRequest({
         request_type: confirmModal.type,
         title: confirmModal.title,
         description: confirmModal.description || "",
@@ -112,13 +136,14 @@ export function ClientCatalogPage() {
         urgency: urgency,
       });
 
-      toast.success("Service request submitted successfully!");
+      toast.success(confirmModal.paymentPlan ? "Installment request sent for review." : "Service request submitted successfully!");
       setConfirmModal(null);
       setSuccessModal({
         open: true,
         requestId: res.id,
         title: confirmModal.title,
         total: confirmModal.estimatedTotal,
+        paymentPlan: Boolean(confirmModal.paymentPlan),
       });
     } catch (err: any) {
       toast.error(err.message || "Failed to submit service request");
@@ -728,7 +753,7 @@ export function ClientCatalogPage() {
       {/* ======================================================== */}
       {confirmModal && confirmModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-card border border-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-card border border-border rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="space-y-0.5">
               <span className="text-[10px] font-mono uppercase text-primary font-bold">
                 Confirm Service Request
@@ -749,8 +774,17 @@ export function ClientCatalogPage() {
               </div>
             </div>
 
+            {currency === "ETB" && confirmModal.type !== "production" && confirmModal.estimatedTotal >= 25000 && <div className="space-y-4 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-card to-emerald-50/50 p-4">
+              <div><p className="text-sm font-bold">Choose how you’d like to pay</p><p className="mt-1 text-xs text-muted-foreground">Request full payment or propose a flexible installment plan. Furii confirms the final terms.</p></div>
+              <div className="grid grid-cols-2 gap-2"><button onClick={()=>setConfirmModal({...confirmModal,paymentPlan:false})} className={`rounded-xl border p-3 text-left text-sm font-semibold ${!confirmModal.paymentPlan?"border-primary bg-primary/5":"bg-background"}`}>Pay in full<span className="mt-1 block text-xs font-normal text-muted-foreground">{formatCurrency(confirmModal.estimatedTotal,currency)}</span></button><button onClick={()=>setConfirmModal({...confirmModal,paymentPlan:true,downPayment:confirmModal.downPayment??minimumDown,installmentCount:confirmModal.installmentCount??1})} className={`rounded-xl border p-3 text-left text-sm font-semibold ${confirmModal.paymentPlan?"border-primary bg-primary/5":"bg-background"}`}>Installments<span className="mt-1 block text-xs font-normal text-muted-foreground">40% minimum down · 15k minimum monthly</span></button></div>
+              {confirmModal.paymentPlan && <>
+                <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-muted-foreground">Initial down payment <span className="font-normal">(minimum {formatCurrency(minimumDown,currency)})</span><input type="number" min={minimumDown} max={confirmModal.estimatedTotal-15000} step="1000" value={selectedDown} onChange={(event)=>{const down=Math.min(Math.max(Number(event.target.value)||minimumDown,minimumDown),confirmModal.estimatedTotal-15000);const max=Math.min(24,Math.floor((confirmModal.estimatedTotal-down)/15000));setConfirmModal({...confirmModal, paymentPlan:true, downPayment:down, installmentCount:Math.min(confirmModal.installmentCount||1,Math.max(max,1))});}} className="mt-1.5 w-full rounded-xl border bg-background px-3 py-2.5 text-sm font-semibold text-foreground" /></label><label className="text-xs font-semibold text-muted-foreground">Monthly installments<select value={Math.min(selectedInstallments,Math.max(maxInstallments,1))} onChange={(event)=>setConfirmModal({...confirmModal,installmentCount:Number(event.target.value)})} className="mt-1.5 w-full rounded-xl border bg-background px-3 py-2.5 text-sm font-semibold text-foreground">{Array.from({length:Math.max(maxInstallments,1)},(_,index)=>index+1).map((count)=><option key={count} value={count}>{count} {count===1?"month":"months"} · {formatCurrency(remainingAfterDown/count,currency)}/mo</option>)}</select></label></div>
+                <div className="rounded-xl border bg-background p-4"><div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-bold">Your estimated payment schedule</p><p className="text-[11px] text-muted-foreground">Final due dates begin after the initial payment is verified.</p></div><Receipt className="h-5 w-5 text-primary"/></div><div className="space-y-2 text-sm"><div className="flex justify-between rounded-lg bg-emerald-50 px-3 py-2 text-emerald-950"><span>Initial payment</span><strong className="font-mono">{formatCurrency(selectedDown,currency)}</strong></div>{Array.from({length:selectedInstallments},(_,index)=><div key={index} className="flex justify-between border-b py-2 last:border-0"><span>Month {index+1}</span><strong className="font-mono">{formatCurrency(index===selectedInstallments-1?monthlyLast:monthlyBase,currency)}</strong></div>)}<div className="flex justify-between border-t pt-2 font-bold"><span>Total</span><span className="font-mono">{formatCurrency(confirmModal.estimatedTotal,currency)}</span></div></div></div>
+              </>}
+            </div>}
+
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Submitting registers this request with Furii Operations. You can attach a payment receipt directly to initiate kickoff.
+              {confirmModal.paymentPlan ? "This sends your proposal to the Furii team for approval. Your installment bills are created only after you accept the approved terms." : "Submitting registers this request with Furii Operations. You can attach a payment receipt directly to initiate kickoff."}
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
@@ -761,11 +795,11 @@ export function ClientCatalogPage() {
                 Cancel
               </button>
               <button
-                disabled={isCreating}
+                disabled={isCreating || isSavingPlan || (confirmModal.paymentPlan && (maxInstallments < 1 || selectedInstallments < 1 || selectedInstallments > maxInstallments || selectedDown >= confirmModal.estimatedTotal))}
                 onClick={handleConfirmRequest}
                 className="px-4 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold rounded-lg transition-colors shadow-2xs cursor-pointer"
               >
-                {isCreating ? "Submitting..." : "Confirm & Submit"}
+                {isCreating || isSavingPlan ? "Submitting..." : confirmModal.paymentPlan ? "Send installment proposal" : "Confirm & Submit"}
               </button>
             </div>
           </div>
@@ -792,11 +826,11 @@ export function ClientCatalogPage() {
 
             <div className="space-y-2 pt-2">
               <button
-                onClick={() => navigate(`/portal/payment?requestId=${successModal.requestId}`)}
+                onClick={() => navigate(successModal.paymentPlan ? "/portal/installments" : `/portal/payment?requestId=${successModal.requestId}`)}
                 className="w-full py-2 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold rounded-lg transition-colors shadow-2xs cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Receipt className="w-3.5 h-3.5" />
-                Attach Receipt & Pay
+                {successModal.paymentPlan ? "View payment plan" : "Attach Receipt & Pay"}
               </button>
               <button
                 onClick={() => navigate("/portal/services?tab=requested")}
