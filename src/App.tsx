@@ -28,6 +28,7 @@ import { CalendarPage } from "@/pages/CalendarPage";
 import { ReportsPage } from "@/pages/ReportsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { AdminSocialPage } from "@/pages/admin/AdminSocialPage";
+import { AdminInstallmentsPage } from "@/pages/admin/AdminInstallmentsPage";
 
 
 
@@ -42,6 +43,7 @@ import { ClientFilesPage } from "@/pages/portal/ClientFilesPage";
 import { ClientFinancialsPage } from "@/pages/portal/ClientFinancialsPage";
 import { ClientSchedulePage } from "@/pages/portal/ClientSchedulePage";
 import { ClientSocialPage } from "@/pages/portal/ClientSocialPage";
+import { ClientInstallmentsPage } from "@/pages/portal/ClientInstallmentsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -170,6 +172,7 @@ function AppRoutes() {
           </AdminGuard>
         }
       />
+      <Route path="/admin/installments" element={<AdminGuard><AdminInstallmentsPage /></AdminGuard>} />
 
 
       {/* Client Portal Dedicated Route Group */}
@@ -238,6 +241,7 @@ function AppRoutes() {
           </ClientGuard>
         }
       />
+      <Route path="/portal/installments" element={<ClientGuard><ClientInstallmentsPage /></ClientGuard>} />
       <Route
         path="/portal/schedule"
         element={
