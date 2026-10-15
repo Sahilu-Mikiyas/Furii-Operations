@@ -36,6 +36,7 @@ export function ClientInstallmentsPage() {
   return <div className="space-y-6">
     <PageHeader title="Installment plans" description="Review your payment terms, upcoming bills, and verified payments in one place." />
     {isLoading ? <div className="flex items-center justify-center rounded-2xl border bg-card py-16 text-sm text-muted-foreground"><LoaderCircle className="mr-2 h-4 w-4 animate-spin"/>Loading payment plans…</div>
+    : error ? <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950"><p className="font-semibold">Installment billing needs database setup</p><p className="mt-1">Ask your administrator to run <code>supabase/manual/installment_plans.sql</code> in Supabase, then refresh the schema cache with <code>NOTIFY pgrst, 'reload schema';</code></p></div>
     : plans.length === 0 ? <div className="rounded-2xl border bg-card p-10 text-center"><div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary"><CreditCard className="h-6 w-6"/></div><h2 className="font-semibold">No installment plans yet</h2><p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Choose a fixed-price service in the catalog and select the installment option to send a proposal.</p></div>
     : <div className="space-y-5">{plans.map((plan: any) => {
       const schedule = plan.schedule || [];
