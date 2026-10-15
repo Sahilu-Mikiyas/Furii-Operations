@@ -18,6 +18,9 @@ export function useInstallmentPlans() {
   const rpcMutation = useMutation({
     mutationFn: async ({ name, args }: { name: string; args: Record<string, unknown> }) => {
       const { data, error } = await (supabase as any).rpc(name, args);
+      if (error?.code === "PGRST202" || error?.message?.includes("schema cache")) {
+        throw new Error("Installment billing is not enabled in Supabase yet. Run supabase/manual/installment_plans.sql in the Supabase SQL Editor, then run: NOTIFY pgrst, 'reload schema';");
+      }
       if (error) throw error;
       return data;
     },
